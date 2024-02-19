@@ -2,10 +2,10 @@ pub enum MongoDbCollection{
     SampleCollection,
 }
 
-impl MongoDbCollection {
-    fn as_str(&self) -> &'static str{
+impl ToString for MongoDbCollection {
+    fn to_string(&self) -> String{
         match self {
-            MongoDbCollection::SampleCollection => "SampleCollection"
+            Self::SampleCollection => String::from("SampleCollection")
         }
     }
 }
