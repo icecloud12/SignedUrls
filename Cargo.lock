@@ -231,6 +231,7 @@ dependencies = [
  "clap",
  "hyper",
  "mongodb",
+ "rand",
  "serde",
  "serde_json",
  "tokio",
