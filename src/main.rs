@@ -1,83 +1,38 @@
 mod util;
-
-use axum::{response::{Html}, routing::get};
-//use mongodb::{options::{ClientOptions, ResolverConfig}, Client, Collection};
-use util::collection::MongoDbCollection::{self, SampleCollection};
+mod routes;
+use axum::{response::Html, routing::{get, post}, Router, extract::Json};
 use std::{
-    io::{
-        Result,
-        prelude::*
-    },
-    net::TcpStream,
-    net::TcpListener, 
-    fs,
+    format,
+    env,
+    error::Error
 };
-use axum_tut::ThreadPool;
-use util::HttpRequestHelper::{
-    *,
-    HTTPRequest, 
-    Router,
-    self
-};
+use mongodb::{Client, options::{ClientOptions, ResolverConfig}};
+use util::collection::MongoDbCollection;
+use routes::project_handler::{
+        create_project,
+        hello
+    };
+use serde::Deserialize;
 
-const IP_ADDRESS:&str = "127.0.0.1";
-const PORT:&str = "7878";
 
-fn main(){
+
+#[tokio::main]
+async fn main(){
+    //routes
+    let router = Router::new()
+        .route("/hello", get(hello))
+        .route("/project", post(create_project))
+    ;
+    let address: &str="127.0.0.1";
+    let port:i32 = 3002;
     
-    let mut router: Router = Router::new();
-    router.get("/", ||{
-        
-    });
-    listen(router);
-}
-fn listen(router: Router){
-    let address: String = format!("{IP_ADDRESS}:{PORT}");
-    let listener: Result<TcpListener> = TcpListener::bind(address);
-    let pool = ThreadPool::new(4);
-    match listener {
-        Ok(listener) => {
-            for l in listener.incoming(){
-                pool.execute(||{
-                    let mut l_stream: TcpStream = l.unwrap();
-                    handle_connection(l_stream)
-                });
-            }
-        },
-        Err(e) => {
-            
-            println!("{:?}",e );
-        }
-            
-    }
-}
-fn handle_connection(mut stream:TcpStream){
-    let mut buffer = [0; 1024];
-    stream.read(&mut buffer).unwrap();
-    let mut lines = buffer.lines();
-
-    let http_request: HTTPRequest = HttpRequestHelper::wrap(lines.next().unwrap().unwrap());
-    let protocol_collection:Vec<&str> = vec!["GET", "POST", "PUT", "PATCH"];
-
-    let protocol = http_request.protocol;
     
-    let status_code: &str;
-    let status_message: &str;
-    if(protocol_collection.contains(&protocol.as_ref())){
-        //file_path = "index.html";
-        status_code = "200";
+    //database connection
+    let options = ClientOptions::parse("mongodb://localhost:27017").await.unwrap();
+    let client = Client::with_options(options).unwrap();
 
-        status_message = "OK";
-    }
-    else {
-        // /file_path = "error.html";
-        status_code = "404";
-        status_message = "Resource Not Found"
-    }
-    //let file = fs::read_to_string(file_path).unwrap();
-    let content = "Hello world";
-    let response: String = format!("HTTP/1.1 {} {} \r\nContent-Length: {}\r\n\r\n{}",status_code, status_message, content.len(), content);
-    stream.write(response.as_bytes()).unwrap();
-    stream.flush().unwrap();
-    
+    //let listener = tokio::net::TcpListener::bind("127.0.0.1:3000").await.unwrap();
+    let listener = tokio::net::TcpListener::bind(format!("{address}:{port}",address = address, port = port)).await.unwrap();
+    println!("---> Listening to: {}", format!("{address}:{port}",address = address, port = port));
+    axum::serve(listener, router).await.unwrap();
 }

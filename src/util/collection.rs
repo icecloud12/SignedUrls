@@ -1,11 +1,13 @@
 pub enum MongoDbCollection{
-    SampleCollection,
+    Project, // project name
+    Collection, // a folder inside the project
 }
 
 impl ToString for MongoDbCollection {
     fn to_string(&self) -> String{
         match self {
-            Self::SampleCollection => String::from("SampleCollection")
+            Self::Project => String::from("Project"),
+            Self::Collection => String::from("Collection")
         }
     }
 }
