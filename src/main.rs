@@ -1,3 +1,4 @@
+
 mod util;
 mod routes;
 use axum::{response::Html, routing::{get, post}, Router, extract::Json};
@@ -6,6 +7,7 @@ use std::{
     env,
     error::Error
 };
+use dotenv::dotenv;
 use mongodb::{Client, options::{ClientOptions, ResolverConfig}};
 use util::collection::MongoDbCollection;
 use routes::project_handler::{
@@ -16,16 +18,19 @@ use serde::Deserialize;
 
 
 
+
 #[tokio::main]
 async fn main(){
+    dotenv().ok();
     //routes
     let router = Router::new()
         .route("/hello", get(hello))
-        .route("/project", post(create_project))
+        .route("/project/create", post(create_project));
+
     ;
-    let address: &str="127.0.0.1";
-    let port:i32 = 3002;
-    
+    let address=std::env::var("ADDRESS").unwrap();
+    let port = std::env::var("PORT").unwrap();
+    println!("{}:{}", address, port );
     
     //database connection
     let options = ClientOptions::parse("mongodb://localhost:27017").await.unwrap();
