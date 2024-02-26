@@ -23,6 +23,7 @@ pub async fn insert_project_if_exists( project_name:String) //-> Result<InsertOn
             let doc= ProjectModel{
                 name: project_name
             };
+            
             let insert_one_result = db.collection::<ProjectModel>(DB_Collection::PROJECT.to_string().as_str()).insert_one(doc, None).await.unwrap();
             insert_one_result.
             
