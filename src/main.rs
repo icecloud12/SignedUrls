@@ -1,6 +1,4 @@
 
-
-
 mod util;
 mod handlers;
 mod network;
@@ -9,10 +7,6 @@ mod models;
 use std::format;
 use dotenv::dotenv;
 use network::{App_Router, Db_Connection::{Connect, DATABASE}};
-
-
-
-
 
 
 #[tokio::main]
