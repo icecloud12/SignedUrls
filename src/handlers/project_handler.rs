@@ -15,7 +15,8 @@ pub struct CreateProjectPostRequest {
 
 pub async fn create_project(Json(post_request):Json<CreateProjectPostRequest>) -> impl IntoResponse{
     let db = Connect().await;
-    let create_request = project::Create(&db, post_request.name.clone()).await;
+    //check if exist
+    let create_request = project::insert_project_if_exists(&db, post_request.name.clone()).await;
 
     match create_request {
         Ok(model) => {

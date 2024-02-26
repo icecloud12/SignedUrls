@@ -2,10 +2,20 @@ use std;
 
 use mongodb::{
     options::ClientOptions, Client, Database,
+    Collection
     
 };
+use crate::network::DB_Collection;
+use std::sync::OnceLock;
+pub static DATABASE: OnceLock<Database> = OnceLock::new();
 
 
+pub struct ProjectModel{
+    name:String,
+}
+pub struct MongoCollection {
+    project : OnceLock<Collection<ProjectModel>>
+}
 pub async fn Connect()-> Database{
     //database connection
     let options = ClientOptions::parse(std::env::var("DATABASE_URI").unwrap()).await.unwrap();
@@ -14,7 +24,8 @@ pub async fn Connect()-> Database{
     return database;
 }
 
-async fn Create_Collection(database:&Database, collection_name:&str)->Result<(),mongodb::error::Error>{
-    let create_collection_request= &database.create_collection("project", None).await;
+async fn Create_Collection(collection_name:&str)->Result<(),mongodb::error::Error>{
+
+    let create_collection_request= DATABASE.get().unwrap().create_collection("project", None).await;
     return create_collection_request.clone()
 }
