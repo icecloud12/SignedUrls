@@ -1,7 +1,7 @@
 
 use mongodb::{results::InsertOneResult, Collection, Database, bson::doc};
-use std::fs::{read, read_dir,create_dir};
-use glob::glob;
+use std::fs;
+
 use crate::network::{Db_Connection::DATABASE, DB_Collection};
 use crate::models::Project::{ProjectModel, ProjectDocument};
 
@@ -18,7 +18,8 @@ pub async fn insert_project_if_exists( project_name:&String) -> Option<String>{
         Ok(o_project_model) => {
             let y:String = match o_project_model {
                 Some(model) => {
-                    model._id.to_string()
+                    let id = model._id.to_string();
+                    id
                 },
                 None => {
                     let doc= ProjectModel{
@@ -26,7 +27,8 @@ pub async fn insert_project_if_exists( project_name:&String) -> Option<String>{
                     };
                     let insert_one_result = db.collection::<ProjectModel>(DB_Collection::PROJECT.to_string().as_str()).insert_one(doc, None).await.unwrap();
                     println!("insert one result {:?}",insert_one_result);
-                    insert_one_result.inserted_id.to_string()
+                    let id = insert_one_result.inserted_id.as_object_id().unwrap().to_string();
+                    id
                 }
             };
             Some(y)
@@ -42,21 +44,43 @@ pub async fn insert_project_if_exists( project_name:&String) -> Option<String>{
     
 }
 
-pub async fn create_project_directory(project_id:&String) -> (bool, &str) {
-    let path:String = format!("/projects/{}",project_id);
-    let ret = match glob(path.as_str()) {
-        Ok(_)=>{(false,"project already exists")},
-        Err(_)=>{
-            let create_result = create_dir(path);
-            match create_result {
-                Ok(_) => {(true, "successfully created directory")},
-                Err(_) => ((false, "failed to create directory"))
+pub async fn create_project_directory(project_id:&String)  {
+    let path = std::path::PathBuf::from("./data").join(&project_id);
+    if !(fs::metadata(&path).is_ok() && fs::metadata(&path).expect("Path does not exist").is_dir()) {
+        println!("directory does not exists. creating directory");
+        match std::fs::create_dir_all(path) {
+            Ok(_)=>{
+                println!("created directory");
+            },
+            Err(error) => {
+                println!("cannot create directory here");
+                println!("{:?}",error)
             }
         }
-    };
-    return ret;
+    }
+}
 
-    //check if folder of project_id does not exist
-    // if exist pass,
-    // if none create
+pub async fn get_project_id_by_name(project_name:&String) -> Option<String>{
+    let db: &Database = DATABASE.get().unwrap();
+    let ifExistResult: Result<Option<ProjectDocument>, mongodb::error::Error> = db.collection::<ProjectDocument>(DB_Collection::PROJECT.to_string().as_str()).find_one(doc! {"name":project_name.as_str()}, None).await;
+
+    let x:Option<String> = match  ifExistResult {
+        Ok(y)=>{
+            let z:Option<String> = match y {
+                Some(a) => {
+                    let id:String = a._id.to_string();
+                    Some(id)
+                },
+                None => {
+                    None
+                }
+            };
+            z
+        },
+        Err(error) => {
+            None
+        }
+    };
+    return x;
+
 }
