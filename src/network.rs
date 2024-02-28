@@ -9,12 +9,14 @@ pub async fn Connect()-> Database{
 
 pub enum DB_Collection {
     PROJECT,
+    REQUEST
 }
 
 impl ToString for DB_Collection {
     fn to_string(&self) -> String {
         match &self {
             &Self::PROJECT => "project".to_string(),
+            &Self::REQUEST => "request".to_string(),
         }
     }
 }
