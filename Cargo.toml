@@ -1,5 +1,5 @@
 [package]
-name = "axum-tut"
+name = "signed-urls"
 version = "0.1.0"
 edition = "2021"
 
