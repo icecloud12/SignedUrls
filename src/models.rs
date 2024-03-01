@@ -1,2 +1,2 @@
-pub mod Project;
-pub mod Request;
+pub mod ProjectModel;
+pub mod RequestModel;

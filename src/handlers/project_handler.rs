@@ -1,12 +1,10 @@
-use axum::response::{IntoResponse, Response};
+use axum::response::IntoResponse;
 use hyper::StatusCode;
-
-use mongodb::Database;
 use serde::Deserialize;
-use axum::{extract::Json};
+use axum::extract::Json;
 use serde_json::json;
 
-use crate::actions::project;
+use crate::actions::project_actions;
 use crate::network;
 #[derive(Deserialize)]
 pub struct CreateProjectPostRequest {
@@ -16,11 +14,11 @@ pub struct CreateProjectPostRequest {
 pub async fn create_project(Json(post_request):Json<CreateProjectPostRequest>) -> impl IntoResponse{
     let db = network::Db_Connection::DATABASE.get().unwrap();
     //check if exist
-    let create_request = project::insert_project_if_exists( &post_request.name).await;
+    let create_request = project_actions::insert_project_if_exists( &post_request.name).await;
     match create_request {
         Some(request) => {
             //then create directory
-            project::create_project_directory(&request).await;
+            project_actions::create_project_directory(&request).await;
             let j = json!({"data":{"id":request, "project_name": post_request.name.as_str()}, "message":"success"});
 
             return (StatusCode::CREATED, Json(j)).into_response();

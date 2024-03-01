@@ -3,7 +3,7 @@ use mongodb::{results::InsertOneResult, Collection, Database, bson::doc};
 use std::fs;
 
 use crate::network::{Db_Connection::DATABASE, DB_Collection};
-use crate::models::Project::{ProjectModel, ProjectDocument};
+use crate::models::ProjectModel::{ProjectModel, ProjectDocument};
 
 pub async fn insert_project_if_exists( project_name:&String) -> Option<String>{
     let db= DATABASE.get().unwrap();
@@ -60,7 +60,7 @@ pub async fn create_project_directory(project_id:&String)  {
     }
 }
 
-pub async fn get_project_id_by_name(project_name:&String) -> Option<String>{
+pub async fn get_project_id_by_name(project_name:String) -> Option<String>{
     let db: &Database = DATABASE.get().unwrap();
     let ifExistResult: Result<Option<ProjectDocument>, mongodb::error::Error> = db.collection::<ProjectDocument>(DB_Collection::PROJECT.to_string().as_str()).find_one(doc! {"name":project_name.as_str()}, None).await;
 
