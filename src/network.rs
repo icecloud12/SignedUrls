@@ -1,10 +1,10 @@
 use mongodb::Database;
 
-pub mod Db_Connection;
-pub mod App_Router;
+pub mod db_connection;
+pub mod app_router;
 
-pub async fn Connect()-> Database{
-    return Db_Connection::Connect().await;
+pub async fn connect()-> Database{
+    return db_connection::connect().await;
 }
 
 pub enum DbCollection {

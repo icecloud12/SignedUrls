@@ -5,7 +5,7 @@ use axum::extract::Json;
 use serde_json::json;
 
 use crate::actions::project_actions;
-use crate::network::Db_Connection::DATABASE;
+use crate::network::db_connection::DATABASE;
 #[derive(Deserialize)]
 pub struct CreateProjectPostRequest {
     pub name: String,

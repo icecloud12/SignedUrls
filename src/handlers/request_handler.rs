@@ -5,13 +5,13 @@ use axum::{
     extract::Json
 };
 use mongodb::Database;
-use crate::network::DB_Collection;
-use crate::network::Db_Connection::DATABASE;
+use crate::network::DbCollection;
+use crate::network::db_connection::DATABASE;
 use crate::actions::{project_actions, signed_url_actions::{
     CreateHashedSignatureResult,
     create_hashed_signature
 }};
-use crate::models::RequestModel::{CreateSignedUrlPostRequest, InsertRequest, CreateSignaturePostRequestOptions};
+use crate::models::request_model::{CreateSignedUrlPostRequest, InsertRequest, CreateSignaturePostRequestOptions};
 
 
 
@@ -50,7 +50,7 @@ pub async fn create_request(Json(post_request):Json<CreateSignedUrlPostRequest>)
                 permission: permission.clone().unwrap()
             };
             
-            let insert_request_id = &db.collection::<InsertRequest>(DB_Collection::REQUEST.to_string().as_str()).insert_one(doc, None).await.unwrap().inserted_id.as_object_id().unwrap().to_string();
+            let insert_request_id = &db.collection::<InsertRequest>(DbCollection::REQUEST.to_string().as_str()).insert_one(doc, None).await.unwrap().inserted_id.as_object_id().unwrap().to_string();
         
             let generated_url:String = format!("{}:{}/{}?permission={},created={}&expiration{}&nonce={}&signature={}",address, port, insert_request_id, permission.unwrap(),created_hashed_signature.date_created,created_hashed_signature.expiration_date,created_hashed_signature.nonce,created_hashed_signature.hashed_signature_base_64);
             return (StatusCode::CREATED, Json(json!(

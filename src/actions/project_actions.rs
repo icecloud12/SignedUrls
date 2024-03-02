@@ -2,8 +2,8 @@
 use mongodb::{ Database, bson::doc};
 use std::fs;
 
-use crate::network::{Db_Connection::DATABASE, DbCollection};
-use crate::models::ProjectModel::{ProjectModel, ProjectDocument};
+use crate::network::{db_connection::DATABASE, DbCollection};
+use crate::models::project_model::{ProjectModel, ProjectDocument};
 
 pub async fn insert_project_if_exists( project_name:&String) -> Option<String>{
     let db= DATABASE.get().unwrap();
@@ -34,7 +34,7 @@ pub async fn insert_project_if_exists( project_name:&String) -> Option<String>{
             Some(y)
             //return ret;
         },
-        Err(error) => { //something went wrong in fetching data
+        Err(_error) => { //something went wrong in fetching data
             None
         }
     };
@@ -62,9 +62,9 @@ pub async fn create_project_directory(project_id:&String)  {
 
 pub async fn get_project_id_by_name(project_name:String) -> Option<String>{
     let db: &Database = DATABASE.get().unwrap();
-    let ifExistResult: Result<Option<ProjectDocument>, mongodb::error::Error> = db.collection::<ProjectDocument>(DbCollection::PROJECT.to_string().as_str()).find_one(doc! {"name":project_name.as_str()}, None).await;
+    let if_exist_result: Result<Option<ProjectDocument>, mongodb::error::Error> = db.collection::<ProjectDocument>(DbCollection::PROJECT.to_string().as_str()).find_one(doc! {"name":project_name.as_str()}, None).await;
 
-    let x:Option<String> = match  ifExistResult {
+    let x:Option<String> = match  if_exist_result {
         Ok(y)=>{
             let z:Option<String> = match y {
                 Some(a) => {
@@ -77,7 +77,7 @@ pub async fn get_project_id_by_name(project_name:String) -> Option<String>{
             };
             z
         },
-        Err(error) => {
+        Err(_error) => {
             None
         }
     };

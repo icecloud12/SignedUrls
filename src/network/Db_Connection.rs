@@ -15,7 +15,7 @@ pub struct ProjectModel{
 pub struct MongoCollection {
     project : OnceLock<Collection<ProjectModel>>
 }
-pub async fn Connect()-> Database{
+pub async fn connect()-> Database{
     //database connection
     let options = ClientOptions::parse(std::env::var("DATABASE_URI").unwrap()).await.unwrap();
     let client = Client::with_options(options).unwrap();
