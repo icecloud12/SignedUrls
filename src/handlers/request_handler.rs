@@ -26,7 +26,6 @@ pub async fn create_request(Json(post_request):Json<CreateSignedUrlPostRequest>)
      = post_request;
     if project_name.is_some() {
         //let project_name = post_request.project_name.unwrap(); 
-
         let project_id_fetch = project_actions::get_project_id_by_name(project_name.clone().unwrap()).await;
 
         if project_id_fetch.is_some() {
@@ -52,7 +51,7 @@ pub async fn create_request(Json(post_request):Json<CreateSignedUrlPostRequest>)
             
             let insert_request_id = &db.collection::<InsertRequest>(DbCollection::REQUEST.to_string().as_str()).insert_one(doc, None).await.unwrap().inserted_id.as_object_id().unwrap().to_string();
         
-            let generated_url:String = format!("{}:{}/{}?permission={},created={}&expiration{}&nonce={}&signature={}",address, port, insert_request_id, permission.unwrap(),created_hashed_signature.date_created,created_hashed_signature.expiration_date,created_hashed_signature.nonce,created_hashed_signature.hashed_signature_base_64);
+            let generated_url:String = format!("{}:{}/id/{}/permission/{}/created/{}/expiration/{}/nonce/{}/signature/{}",address, port, insert_request_id, permission.unwrap(),created_hashed_signature.date_created,created_hashed_signature.expiration_date,created_hashed_signature.nonce,created_hashed_signature.hashed_signature_base_64);
             return (StatusCode::CREATED, Json(json!(
                 {"data":{
                     "url": generated_url
