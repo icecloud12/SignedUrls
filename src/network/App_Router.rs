@@ -1,4 +1,4 @@
-use axum::{Router, routing::{get, post}};
+use axum::{Router, routing::post};
 use crate::handlers::{
     project_handler,
     request_handler

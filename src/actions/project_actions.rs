@@ -1,15 +1,15 @@
 
-use mongodb::{results::InsertOneResult, Collection, Database, bson::doc};
+use mongodb::{ Database, bson::doc};
 use std::fs;
 
-use crate::network::{Db_Connection::DATABASE, DB_Collection};
+use crate::network::{Db_Connection::DATABASE, DbCollection};
 use crate::models::ProjectModel::{ProjectModel, ProjectDocument};
 
 pub async fn insert_project_if_exists( project_name:&String) -> Option<String>{
     let db= DATABASE.get().unwrap();
 
     //check if exists
-    let if_exist_result = db.collection::<ProjectDocument>(DB_Collection::PROJECT.to_string().as_str()).find_one(doc! {
+    let if_exist_result = db.collection::<ProjectDocument>(DbCollection::PROJECT.to_string().as_str()).find_one(doc! {
         "name": project_name.as_str()
     }, None).await;
     
@@ -25,7 +25,7 @@ pub async fn insert_project_if_exists( project_name:&String) -> Option<String>{
                     let doc= ProjectModel{
                         name: project_name.to_string()
                     };
-                    let insert_one_result = db.collection::<ProjectModel>(DB_Collection::PROJECT.to_string().as_str()).insert_one(doc, None).await.unwrap();
+                    let insert_one_result = db.collection::<ProjectModel>(DbCollection::PROJECT.to_string().as_str()).insert_one(doc, None).await.unwrap();
                     println!("insert one result {:?}",insert_one_result);
                     let id = insert_one_result.inserted_id.as_object_id().unwrap().to_string();
                     id
@@ -62,7 +62,7 @@ pub async fn create_project_directory(project_id:&String)  {
 
 pub async fn get_project_id_by_name(project_name:String) -> Option<String>{
     let db: &Database = DATABASE.get().unwrap();
-    let ifExistResult: Result<Option<ProjectDocument>, mongodb::error::Error> = db.collection::<ProjectDocument>(DB_Collection::PROJECT.to_string().as_str()).find_one(doc! {"name":project_name.as_str()}, None).await;
+    let ifExistResult: Result<Option<ProjectDocument>, mongodb::error::Error> = db.collection::<ProjectDocument>(DbCollection::PROJECT.to_string().as_str()).find_one(doc! {"name":project_name.as_str()}, None).await;
 
     let x:Option<String> = match  ifExistResult {
         Ok(y)=>{

@@ -1,9 +1,5 @@
-use std::io::Read;
-use std::time::{SystemTime, UNIX_EPOCH};
 use hyper::StatusCode;
-use rand::{self, Rng};
 use serde_json::json;
-use sha3::{Digest, Sha3_256};
 use axum::{
     response:: IntoResponse,
     extract::Json

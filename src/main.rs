@@ -7,13 +7,13 @@ mod actions;
 mod models;
 use std::format;
 use dotenv::dotenv;
-use network::{App_Router, Db_Connection::{Connect, DATABASE}};
+use network::{App_Router, Db_Connection::DATABASE};
 
 #[tokio::main]
 async fn main(){
     dotenv().ok();
     let db = network::Connect().await;
-    DATABASE.set(db);
+    let _ = DATABASE.set(db);
     //routes
     let router = App_Router::Router().await;
     let address=std::env::var("ADDRESS").unwrap();

@@ -3,11 +3,11 @@ use rand::{self, Rng};
 use std::time::{
     SystemTime, UNIX_EPOCH
 };
-pub enum action_types {
+pub enum ActionTypes {
     UPLOAD,
 }
 
-impl ToString for action_types{
+impl ToString for ActionTypes{
     fn to_string(&self)->String{
         match &self {
             &Self::UPLOAD => "upload".to_string()
@@ -26,7 +26,7 @@ pub fn create_hashed_signature(
     duration: &u64,
     action_type: &String,
 )-> CreateHashedSignatureResult {
-    let date_created:u64 = (SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs());
+    let date_created:u64 = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
     // let default_duration_offset: u64 = std::env::var("DEFAULT_DURATION").unwrap().parse::<u64>().unwrap();
     let expiration_date: u64 = date_created + duration;
     let nonce: u64 = rand::thread_rng().gen();
