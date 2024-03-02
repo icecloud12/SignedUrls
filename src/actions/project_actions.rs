@@ -26,7 +26,6 @@ pub async fn insert_project_if_exists( project_name:&String) -> Option<String>{
                         name: project_name.to_string()
                     };
                     let insert_one_result = db.collection::<ProjectModel>(DbCollection::PROJECT.to_string().as_str()).insert_one(doc, None).await.unwrap();
-                    println!("insert one result {:?}",insert_one_result);
                     let id = insert_one_result.inserted_id.as_object_id().unwrap().to_string();
                     id
                 }
@@ -47,7 +46,6 @@ pub async fn insert_project_if_exists( project_name:&String) -> Option<String>{
 pub async fn create_project_directory(project_id:&String)  {
     let path = std::path::PathBuf::from("./data").join(&project_id);
     if !(fs::metadata(&path).is_ok() && fs::metadata(&path).expect("Path does not exist").is_dir()) {
-        println!("directory does not exists. creating directory");
         match std::fs::create_dir_all(path) {
             Ok(_)=>{
                 println!("created directory");
