@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 askama = { version = "0.12.1", features = ["serde", "serde-json", "markdown"] }
-axum = { version = "0.7.4", features = ["http2"] }
+axum = { version = "0.7.4", features = ["http2", "multipart"] }
 chrono = { version = "0.4.34", features = ["serde"] }
 clap = "4.5.1"
 dotenv = "0.15.0"
