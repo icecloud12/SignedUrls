@@ -7,8 +7,8 @@ use axum::{
 };
 use hyper::StatusCode;
 use serde_json::json;
+use super::models::ExtractSignedUrlParametersRequest;
 
-use crate::models::signed_url_model::ExtractSignedUrlParametersRequest;
 pub async fn process_signed_url_request(
     Path(params):Path<Vec<(String,String)>>,
     Json(body): Json<ExtractSignedUrlParametersRequest>

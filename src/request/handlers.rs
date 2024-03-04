@@ -7,11 +7,13 @@ use axum::{
 use mongodb::Database;
 use crate::network::DbCollection;
 use crate::network::db_connection::DATABASE;
-use crate::actions::{project_actions, signed_url_actions::{
+use crate::project::actions::get_project_id_by_name;
+use crate::signed_url::actions::{
     CreateHashedSignatureResult,
     create_hashed_signature
-}};
-use crate::models::request_model::{CreateSignedUrlPostRequest, InsertRequest, CreateSignaturePostRequestOptions};
+};
+use super::model::{CreateSignedUrlPostRequest, InsertRequest, CreateSignaturePostRequestOptions};
+
 
 
 
@@ -26,7 +28,7 @@ pub async fn create_request(Json(post_request):Json<CreateSignedUrlPostRequest>)
      = post_request;
     if project_name.is_some() {
         //let project_name = post_request.project_name.unwrap(); 
-        let project_id_fetch = project_actions::get_project_id_by_name(project_name.clone().unwrap()).await;
+        let project_id_fetch = get_project_id_by_name(project_name.clone().unwrap()).await;
 
         if project_id_fetch.is_some() {
 

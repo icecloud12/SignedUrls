@@ -3,7 +3,7 @@ use mongodb::{ Database, bson::doc};
 use std::fs;
 
 use crate::network::{db_connection::DATABASE, DbCollection};
-use crate::models::project_model::{ProjectModel, ProjectDocument};
+use super::models::{ProjectDocument, ProjectModel};
 
 pub async fn insert_project_if_exists( project_name:&String) -> Option<String>{
     let db= DATABASE.get().unwrap();
