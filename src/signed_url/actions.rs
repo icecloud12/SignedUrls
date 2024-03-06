@@ -1,9 +1,16 @@
+use axum::{body::Bytes, Error};
 use sha3::{Digest, Sha3_256};
 use rand::{self, Rng};
-use std::time::{
-    SystemTime, UNIX_EPOCH
+use std::{
+    path::Path,
+    ffi::OsStr,
+    time::{
+        SystemTime, UNIX_EPOCH
+    },
 };
 
+
+use tokio::{fs::File, io::AsyncWriteExt};
 use crate::project;
 pub enum ActionTypes {
     UPLOAD,
@@ -59,4 +66,24 @@ pub fn hash_parameters(
     let signature = hasher.finalize();
     let hashed_signature_base_64 = signature.as_slice().iter().map(|b| format!("{:02x}", b)).collect::<String>();
     return hashed_signature_base_64;
+}
+
+pub async fn save_files_to_directory(
+    file_names:Vec<String>,
+    file_bytes: Vec<Bytes>,
+    file_options: Vec<String>,
+
+)-> Result<(), bool>{
+    //the request itself should have a file path to go to
+    for (index, element) in file_bytes.iter().enumerate(){
+        let file_name = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis().to_string();
+        
+        println!("fileNames: {}", file_names[index].as_str());
+        let splits = file_names[index].as_str().split(".");
+        let file_extention = splits.last().unwrap();
+        println!("{}", file_extention);
+        let mut file:File = File::create(format!("./data/{}.{}",file_name,file_extention)).await.unwrap();
+        file.write(&element).await.unwrap();
+    }
+    Ok(())
 }

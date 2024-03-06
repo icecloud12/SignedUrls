@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{num::ParseIntError, str::FromStr, time::{SystemTime, UNIX_EPOCH}};
 
 use axum::{
     body::Bytes, extract::{
@@ -6,7 +6,7 @@ use axum::{
     }, http::request, response:: IntoResponse
 };
 use mongodb::{bson::{doc, oid::ObjectId}, Database};
-use crate::{network, project::{self, models::ProjectDocument}, request::model::RequestDocument};
+use crate::{network, project::{self, models::ProjectDocument}, request::model::RequestDocument, signed_url::actions::save_files_to_directory};
 
 use super::actions::hash_parameters;
 use hyper::StatusCode;
@@ -35,50 +35,61 @@ pub async fn process_signed_url_request(
         collected_params[4].to_owned(),
         collected_params[5].to_owned()
     );
-    //fetch project_id from request id
-    let db = DATABASE.get().unwrap();
-    
-    let request_entry = db.collection::<RequestDocument>(DbCollection::REQUEST.to_string().as_str()).find_one(doc!{"_id":ObjectId::from_str(&request_id).unwrap()}, None).await;
+    let created_time:Result<u64, ParseIntError> = created.parse();
+    let expiration_time:Result<u64, ParseIntError> = expiration.parse();
+    if created_time.is_ok() && expiration_time.is_ok() {
+        let current_time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+        if current_time >= created_time.unwrap() && current_time <= expiration_time.unwrap() {
+        //fetch project_id from request id
+            let db: &Database = DATABASE.get().unwrap();
+            let request_entry = db.collection::<RequestDocument>(DbCollection::REQUEST.to_string().as_str()).find_one(doc!{"_id":ObjectId::from_str(&request_id).unwrap()}, None).await;
 
-    if request_entry.is_ok(){
-        let project_name = request_entry.unwrap().unwrap().project_name;
-        let project_entry = db.collection::<ProjectDocument>(DbCollection::PROJECT.to_string().as_str()).find_one(doc! {"name": project_name}, None).await.unwrap().unwrap();
+            if request_entry.is_ok(){
+                let project_name = request_entry.unwrap().unwrap().project_name;
+                let project_entry = db.collection::<ProjectDocument>(DbCollection::PROJECT.to_string().as_str()).find_one(doc! {"name": project_name}, None).await.unwrap().unwrap();
 
-        let replicated_hash = hash_parameters(&project_entry._id.to_string(), &from_str::<u64>(&created).unwrap(), &from_str::<u64>(&expiration).unwrap(), &permission, &from_str::<u64>(&nonce).unwrap());
-        if(replicated_hash == signature){
-            //if valid extract the necessary information
-            let mut file_bytes:Vec<Bytes>= vec![];
-            let mut fileOptions:Vec<String>=vec![];
-            println!("hashed signature valid");
-            while let Some(mut part) = multipart.next_field().await.unwrap() {
-                //println!("{:#?}", part);
-                //let name = part.name().unwrap().to_string();
-                
-                //let content_type = part.headers().get("content-type");
-                if part.name().unwrap_or_else(|| "") == "files" {
-                    let data = part.bytes().await.unwrap();
-                    //assume content type containing parts are files
-                    file_bytes.push(data);
-                }else if part.name().unwrap_or_else(|| "") == "fileOptions"{
-                    let data = part.bytes().await.unwrap();
-                    let val:String = String::from_utf8(data.to_vec()).unwrap();
-                    fileOptions.push(val)
+                let replicated_hash = hash_parameters(&project_entry._id.to_string(), &from_str::<u64>(&created).unwrap(), &from_str::<u64>(&expiration).unwrap(), &permission, &from_str::<u64>(&nonce).unwrap());
+                if(replicated_hash == signature){
+                    //if valid extract the necessary information
+                    let mut file_bytes:Vec<Bytes>= vec![];
+                    let mut file_options:Vec<String>=vec![];
+                    let mut file_names:Vec<String> = vec![];
+                    println!("hashed signature valid");
+                    while let Some(mut part) = multipart.next_field().await.unwrap() {
+                        
+                        if part.name().unwrap_or_else(|| "") == "files" {
+                            
+                            let file_name = part.file_name().unwrap().to_string();
+                            let data: Bytes = part.bytes().await.unwrap();
+                            //assume content type containing parts are files
+                            file_bytes.push(data);
+                            file_names.push(file_name);
+
+                        }else if part.name().unwrap_or_else(|| "") == "fileOptions"{
+                            let data = part.bytes().await.unwrap();
+                            let val:String = String::from_utf8(data.to_vec()).unwrap();
+                            file_options.push(val);
+                        }
+
+                    }
+                    let _save = save_files_to_directory(file_names, file_bytes, file_options).await;
+                    return (StatusCode::OK, Json(json!({"data":{
+                        "params":params,
+                    }})));
+                }else{
+                    println!("hashed signature invalid");
+                    return (StatusCode::BAD_REQUEST, Json(json!({"data":"Hashed Signature not authorized"})));
                 }
+            
 
+            }else{
+                println!("hashed signature invalid");
+                return (StatusCode::BAD_REQUEST, Json(json!({"data":"Hashed Signature not authorized"})));
             }
-        
-            return (StatusCode::OK, Json(json!({"data":{
-                "params":params,
-            }})));
-        }else{
-            println!("hashed signature invalid");
-            return (StatusCode::BAD_REQUEST, Json(json!({"data":"Hashed Signature not authorized"})));
-        }
-    
 
-    }else{
-        println!("hashed signature invalid");
-        return (StatusCode::BAD_REQUEST, Json(json!({"data":"Hashed Signature not authorized"})));
+        }
     }
+    println!("request expired");
+    return (StatusCode::BAD_REQUEST, Json(json!({"data":"Request Expired"})));
     
 }
