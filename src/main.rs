@@ -3,6 +3,7 @@ mod network;
 mod project;
 mod request;
 mod signed_url;
+mod file;
 
 
 use std::format;

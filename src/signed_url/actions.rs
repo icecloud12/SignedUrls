@@ -1,18 +1,19 @@
-use axum::{body::Bytes, extract::{multipart, Multipart}, response::IntoResponse, Error, Json};
-use hyper::StatusCode;
-use mongodb::{bson::{doc, oid::ObjectId}, Database};
-use serde_json::{from_str, json};
+use axum::extract:: Multipart;
+use mongodb::{bson::{doc, oid::ObjectId}, results::InsertOneResult, Database};
+use serde_json::from_str;
 use sha3::{Digest, Sha3_256};
 use rand::{self, Rng};
 use std::{
-    fs, num::ParseIntError, path::Path, str::FromStr, time::{
+    fs, num::ParseIntError, str::FromStr, time::{
         SystemTime, UNIX_EPOCH
     }
 };
-use crate::{network::{db_connection::DATABASE, DbCollection}, project::{self, models::ProjectDocument}, request::model::UploadRequest};
+use super::models::SaveFilesToDirectoryResult;
+use crate::{ file::model::FileDocumentInsertRow, network::{db_connection::DATABASE, DbCollection}, project:: models::ProjectDocument, request::model::UploadRequest};
 
 use tokio::{fs::File, io::AsyncWriteExt};
-use crate::{request::model::RequestDocument};
+use crate::request::model::RequestDocument;
+use crate::file::model::FileDocumentOptions;
 pub enum ActionTypes {
     UPLOAD,
 }
@@ -69,17 +70,10 @@ pub fn hash_parameters(
     return hashed_signature_base_64;
 }
 
-pub struct ValidateSignedUrlResultUploadFiles {
-    bytes: Vec<Bytes>,
-    names: Vec<String>,
-    request_id: String
-}
 pub async fn validate_signed_url( 
-    params: Vec<(String,String)>,
-    mut multipart: Multipart,
+    params: Vec<String>,
     permission: &str
-) -> Result<ValidateSignedUrlResultUploadFiles, String> {
-    let collected_params = params.iter().map(|param| param.1.clone()).collect::<Vec<String>>();
+) -> bool {
     let (
         request_id,
         created,
@@ -87,15 +81,16 @@ pub async fn validate_signed_url(
         nonce,
         signature
     ) = (
-        collected_params[0].to_owned(),
-        collected_params[1].to_owned(),
-        collected_params[2].to_owned(),
-        collected_params[3].to_owned(),
-        collected_params[4].to_owned()
+        params[0].to_owned(),
+        params[1].to_owned(),
+        params[2].to_owned(),
+        params[3].to_owned(),
+        params[4].to_owned()
     );
     
     let created_time:Result<u64, ParseIntError> = created.parse();
     let expiration_time:Result<u64, ParseIntError> = expiration.parse();
+    
     if created_time.is_ok() && expiration_time.is_ok() {
         let current_time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
         if current_time >= created_time.unwrap() && current_time <= expiration_time.unwrap() {
@@ -104,65 +99,39 @@ pub async fn validate_signed_url(
             let request_entry = db.collection::<RequestDocument>(DbCollection::REQUEST.to_string().as_str()).find_one(doc!{"_id":ObjectId::from_str(&request_id).unwrap()}, None).await;
 
             if request_entry.is_ok(){
+
                 let project_name = request_entry.unwrap().unwrap().project_name;
                 let project_entry = db.collection::<ProjectDocument>(DbCollection::PROJECT.to_string().as_str()).find_one(doc! {"name": project_name}, None).await.unwrap().unwrap();
 
                 let replicated_hash = hash_parameters(&project_entry._id.to_string(), &from_str::<u64>(&created).unwrap(), &from_str::<u64>(&expiration).unwrap(), &permission.to_string(), &from_str::<u64>(&nonce).unwrap());
                 if replicated_hash == signature{
-                    //if valid extract the necessary information
-                    let mut file_bytes:Vec<Bytes>= vec![];
-                    let mut file_names:Vec<String> = vec![];
-                    println!("hashed signature valid");
-                    while let Some(part) = multipart.next_field().await.unwrap() {
-                        
-                        if part.name().unwrap_or_else(|| "") == "files" {
-                            
-                            let file_name = part.file_name().unwrap().to_string();
-                            let data: Bytes = part.bytes().await.unwrap();
-                            //assume content type containing parts are files
-                            file_bytes.push(data);
-                            file_names.push(file_name);
-
-                        }
-                    }
-                    return Ok(ValidateSignedUrlResultUploadFiles {
-                        bytes: file_bytes,
-                        names: file_names,
-                        request_id: request_id 
-
-                    });
-                }else{
-                    println!("hashed signature invalid");
-                    return Err("hashed signature invalid".to_string());
+                    return true
                 }
-            }else{
-                println!("hashed signature invalid");
-                return Err("Hashed Signature not authorized".to_string());
+            
             }
-
         }
     }
-    println!("hashed signature invalid");
-    return Err("Hashed Signature not authorized".to_string());
+    return false;
 }
 
 pub async fn save_files_to_directory(
-
-    files: ValidateSignedUrlResultUploadFiles
-
-)-> Result<(), bool>{
+    request_id:String,
+    mut multipart:Multipart,
+    //param: ValidateSignedUrlResultUploadFiles
+)-> Result<SaveFilesToDirectoryResult, bool>{
     //the request itself should have a file path to go to
     //get the project name and target path by files.request_id
-    let db = DATABASE.get().unwrap();
-    let request_entry = db.collection::<UploadRequest>(DbCollection::REQUEST.to_string().as_str()).find_one(doc!{"_id": ObjectId::from_str(files.request_id.as_str()).unwrap()}, None).await.unwrap().unwrap();
-    let project_name = request_entry.project_name;
-    let path = std::path::PathBuf::from("./data/").join(format!("{}/",project_name)).join(format!("{}",request_entry.target));
 
-    println!("path: {}", path.to_str().unwrap());
-    if !(fs::metadata(&path).is_ok() && fs::metadata(&path).expect("").is_dir()){
-        match std::fs::create_dir_all(&path) {
-            Ok(a) =>{
-                    
+    let db: &Database = DATABASE.get().unwrap();
+    let request_entry = db.collection::<UploadRequest>(DbCollection::REQUEST.to_string().as_str()).find_one(doc!{"_id": ObjectId::from_str(request_id.as_str()).unwrap()}, None).await.unwrap().unwrap();
+
+    let project_name = request_entry.project_name;
+    let initial_path: std::path::PathBuf = std::path::PathBuf::from("./data/").join(format!("{}/",project_name)).join(format!("{}/",request_entry.target));
+
+    if !(fs::metadata(&initial_path).is_ok() && fs::metadata(&initial_path).expect("").is_dir()){
+        match std::fs::create_dir_all(&initial_path) {
+            Ok(_a) =>{
+                //do something on dir creation
             },
             Err(_) => {
                 println!("cannot create in this directory");
@@ -170,14 +139,39 @@ pub async fn save_files_to_directory(
             }
         }
     }
-
-    for (index, element) in files.bytes.iter().enumerate(){
-        let file_name = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis().to_string();
-        let splits = files.names[index].as_str().split(".");
-        let file_extention = splits.last().unwrap();
-        let mut file:File = File::create(format!("./data/{}/{}/{}.{}",project_name, request_entry.target, file_name,file_extention)).await.unwrap();
-        file.write(&element).await.unwrap();
+    let mut created_files: Vec<super::models::File> = vec![];
+    while let Some(part) = multipart.next_field().await.unwrap(){
+        if(part.name().unwrap_or_else(|| "")) == "files" {
+            let original_file_name = part.file_name().unwrap().to_string();
+            let file_bytes = part.bytes().await.unwrap();
+            let file_document_insert: FileDocumentInsertRow = FileDocumentInsertRow {
+                file_name : original_file_name.clone(),
+                path: initial_path.to_str().unwrap().to_string(),
+                options: FileDocumentOptions{}
+            };
+            let insert_file_insert_result: InsertOneResult = db.collection::<FileDocumentInsertRow>(DbCollection::FILE.to_string().as_str()).insert_one(file_document_insert, None).await.unwrap();
+            println!("{:#?}",insert_file_insert_result);
+            let new_file_name = insert_file_insert_result.inserted_id.as_object_id().unwrap().to_string();
+            let file_extention = original_file_name.split(".").last().unwrap();
+            let new_file_path: String = initial_path.clone().join(format!("{}.{}",new_file_name,file_extention)).to_str().unwrap().to_string();
+            println!("{}",new_file_path);
+            let mut file:File = File::create(new_file_path.clone()).await.unwrap();
+            file.write(&file_bytes).await.unwrap();
+            created_files.push( super::models::File{
+                _id: new_file_name,
+                request_id: request_id.clone(),
+                path: initial_path.to_str().unwrap().to_string().split("/data").last().unwrap().to_string(),
+                file_name:original_file_name,
+                public_url:None
+            })
+        }
+        //index = index+1;
     }
-    Ok(())
+
+
+    Ok(SaveFilesToDirectoryResult {
+        request_id: request_id,
+        files: created_files
+    })
 }
 
