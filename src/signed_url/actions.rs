@@ -97,17 +97,42 @@ pub async fn validate_signed_url(
         //fetch project_id from request id
             let db: &Database = DATABASE.get().unwrap();
             let request_entry = db.collection::<RequestDocument>(DbCollection::REQUEST.to_string().as_str()).find_one(doc!{"_id":ObjectId::from_str(&request_id).unwrap()}, None).await;
-
+            //println!("{:#?}",request_entry); 
             if request_entry.is_ok(){
-
-                let project_name = request_entry.unwrap().unwrap().project_name;
+                let entry = request_entry.unwrap().unwrap();
+                
+                let project_name = entry.project_name;
                 let project_entry = db.collection::<ProjectDocument>(DbCollection::PROJECT.to_string().as_str()).find_one(doc! {"name": project_name}, None).await.unwrap().unwrap();
 
                 let replicated_hash = hash_parameters(&project_entry._id.to_string(), &from_str::<u64>(&created).unwrap(), &from_str::<u64>(&expiration).unwrap(), &permission.to_string(), &from_str::<u64>(&nonce).unwrap());
-                if replicated_hash == signature{
+               
+                if replicated_hash == signature && !entry.options.is_consumed {
+                    if entry.options.is_consumable {
+                        let filter = doc! {"_id": entry._id};
+                        let update = doc!{
+                            "$set": {
+                                "options" : {
+                                    //you actually need to restructure it damn, TAKE NOTE OF UPDATING a SUBOBJECT
+                                    "is_consumbable": entry.options.is_consumable,
+                                    "is_consumed": true
+                                }
+                            }
+                        };
+                        
+                        let _update_result = db.collection::<ProjectDocument>(DbCollection::REQUEST.to_string().as_str()).update_one(
+                            filter,
+                            update,
+                            None
+                        ).await.unwrap();
+                        println!("update result {:#?}", _update_result)
+                    }
                     return true
                 }
-            
+                if replicated_hash == signature{
+                        println!("Signature is not valid");
+                }else if entry.options.is_consumed {
+                    println!("Signature is consumed");
+                }
             }
         }
     }
@@ -142,28 +167,35 @@ pub async fn save_files_to_directory(
     let mut created_files: Vec<super::models::File> = vec![];
     while let Some(part) = multipart.next_field().await.unwrap(){
         if(part.name().unwrap_or_else(|| "")) == "files" {
-            let original_file_name = part.file_name().unwrap().to_string();
-            let file_bytes = part.bytes().await.unwrap();
-            let file_document_insert: FileDocumentInsertRow = FileDocumentInsertRow {
-                file_name : original_file_name.clone(),
-                path: initial_path.to_str().unwrap().to_string(),
-                options: FileDocumentOptions{}
+
+            match part.file_name(){
+                Some(file_name) => {
+                    //file_name.to_string()
+                    let original_file_name = file_name.to_string();
+                    let file_bytes = part.bytes().await.unwrap();
+                    let file_document_insert: FileDocumentInsertRow = FileDocumentInsertRow {
+                        file_name : original_file_name.clone(),
+                        path: initial_path.to_str().unwrap().to_string(),
+                        options: FileDocumentOptions{}
+                    };
+                    let insert_file_insert_result: InsertOneResult = db.collection::<FileDocumentInsertRow>(DbCollection::FILE.to_string().as_str()).insert_one(file_document_insert, None).await.unwrap();
+                    let new_file_name = insert_file_insert_result.inserted_id.as_object_id().unwrap().to_string();
+                    let file_extention = original_file_name.split(".").last().unwrap();
+                    let new_file_path: String = initial_path.clone().join(format!("{}.{}",new_file_name,file_extention)).to_str().unwrap().to_string();
+                    let mut file:File = File::create(new_file_path.clone()).await.unwrap();
+                    file.write(&file_bytes).await.unwrap();
+                    created_files.push( super::models::File{
+                        _id: new_file_name,
+                        request_id: request_id.clone(),
+                        path: initial_path.to_str().unwrap().to_string().split("/data").last().unwrap().to_string(),
+                        file_name:original_file_name,
+                        public_url:None
+                    })
+
+                },
+                None => {}
             };
-            let insert_file_insert_result: InsertOneResult = db.collection::<FileDocumentInsertRow>(DbCollection::FILE.to_string().as_str()).insert_one(file_document_insert, None).await.unwrap();
-            println!("{:#?}",insert_file_insert_result);
-            let new_file_name = insert_file_insert_result.inserted_id.as_object_id().unwrap().to_string();
-            let file_extention = original_file_name.split(".").last().unwrap();
-            let new_file_path: String = initial_path.clone().join(format!("{}.{}",new_file_name,file_extention)).to_str().unwrap().to_string();
-            println!("{}",new_file_path);
-            let mut file:File = File::create(new_file_path.clone()).await.unwrap();
-            file.write(&file_bytes).await.unwrap();
-            created_files.push( super::models::File{
-                _id: new_file_name,
-                request_id: request_id.clone(),
-                path: initial_path.to_str().unwrap().to_string().split("/data").last().unwrap().to_string(),
-                file_name:original_file_name,
-                public_url:None
-            })
+            
         }
         //index = index+1;
     }

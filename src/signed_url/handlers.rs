@@ -6,8 +6,6 @@ use axum::{
     }, response:: IntoResponse
 };
 use crate::signed_url::actions::{save_files_to_directory, validate_signed_url};
-
-use super::models::SaveFilesToDirectoryResult;
 use hyper::StatusCode;
 use serde_json::json;
 
@@ -23,7 +21,6 @@ pub async fn process_signed_url_upload_request(
         let save_files_to_directory_result  = save_files_to_directory(request_id,multipart).await;
         match save_files_to_directory_result {
             Ok(res) => {
-                println!("{:#?}",res);
                 return (StatusCode::OK,Json(json!({"data":res})));
             },
             Err(_)=>{

@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Deserialize,Serialize)]
 pub struct CreateSignaturePostRequestOptions{
     pub is_consumable: Option<bool>,
+    pub is_consumed: Option<bool>
     
 }
 #[derive(Deserialize)]
@@ -33,11 +34,18 @@ pub struct UploadRequest {
 }
 
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug, Serialize)]
 pub struct RequestDocument {
     pub _id:ObjectId,
     pub project_name: String,
     pub date_created: u64,
     pub expiration_date: u64,
+    pub options:RequestDocumentOptions,
     pub permission: String
+}
+
+#[derive(Deserialize,Serialize, Debug)]
+pub struct RequestDocumentOptions {
+    pub is_consumable: bool,
+    pub is_consumed: bool
 }
