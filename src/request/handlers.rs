@@ -1,14 +1,11 @@
 
 
-use std::str::FromStr;
+use std::{fs::File, str::FromStr};
 
 use hyper::StatusCode;
 use serde_json::json;
 use axum::{
-    response:: IntoResponse,
-    body::{BodyDataStream, Body},
-
-    extract::{Json, Path}
+    body::{Body, BodyDataStream}, extract::{Json, Path}, http::Error, response:: IntoResponse
 };
 use mongodb::{bson::{doc, oid::ObjectId}, Database};
 use crate::{file::model::FileDocument, network::DbCollection};
@@ -78,28 +75,51 @@ pub async fn create_upload_request(Json(post_request):Json<CreateSignedUrlPostRe
 
 }
 
-pub async fn preview_file( Path(params): Path<Vec<(String, String)>>) -> impl IntoResponse{
+pub async fn process_preview_request( Path(params): Path<Vec<(String, String)>>) -> impl IntoResponse{
     let file_id = params[0].1.clone();
     //check if file is public
     let database = DATABASE.get().unwrap();
-    let file_ref = database.collection::<FileDocument>(DbCollection::FILE.to_string().as_str()).find_one(doc!{ "_id": ObjectId::from_str(&file_id).unwrap()}, None).await.unwrap();
-    
-    match file_ref {
-        Some(fileDoc)=>{
-            let path = std::path::PathBuf::from(fileDoc.path.clone());
-            let file = match tokio::fs::File::open(path).await {
-                Ok(file) => file,
-                Err(err) => return Err((StatusCode::NOT_FOUND, format!("File not found: {}", err))),
-            };
-            
-            // convert the `AsyncRead` into a `Stream`
-            let stream = ReaderStream::new(file);
-            // convert the `Stream` into an `axum::body::HttpBody`
-            let body = Body::from_stream(stream);
+    let file_object_id = ObjectId::from_str(&file_id);
+    if file_object_id.is_err(){
+        return Err((StatusCode::INTERNAL_SERVER_ERROR, format!("Internal server error")));
+    }else{
+
+        let file_ref:Result<Option<FileDocument>, mongodb::error::Error> = database.collection::<FileDocument>(DbCollection::FILE.to_string().as_str()).find_one(doc!{ "_id": &file_object_id.unwrap()}, None).await;
         
-            return Ok(StatusCode::OK,body).into_response();
-        },
-        None => return (StatusCode::NOT_FOUND, "file not found")
-    };
+        match file_ref {
+            Ok(mongodb_ok)=>{
+                match mongodb_ok {
+                    Some(file_doc)=>{
+                        if file_doc.options.is_public{
+
+                            let initial_path = std::path::PathBuf::from(file_doc.path.clone());
+                            let file_ext = file_doc.file_name.split(".").last().unwrap();
+                            let path = initial_path.join(format!("{}.{}",file_doc._id.to_hex(), file_ext));            
+                            println!("filePath: {}",&path.as_os_str().to_str().unwrap().to_string());
+                            let file = match tokio::fs::File::open(path).await {
+                                Ok(file) => file,
+                                Err(err) => return Err((StatusCode::NOT_FOUND, format!("File not found: {}", err))),
+                            };
+                            
+                            // convert the `AsyncRead` into a `Stream`
+                            let stream = ReaderStream::new(file);
+                            // convert the `Stream` into an `axum::body::HttpBody`
+                            let body = Body::from_stream(stream);
+                            return Ok((StatusCode::OK,body));
+                        }else{
+                            return Err((StatusCode::NOT_FOUND, format!("File not found")))
+                        }
+                    
+                    },
+                    None => return Err((StatusCode::NOT_FOUND, "file not found".to_string()))
+                }
+    
+            },
+            Err(_) =>{
+                return Err((StatusCode::INTERNAL_SERVER_ERROR, format!("Internal server error")))
+            }
+            
+        }
+    }
     
 }

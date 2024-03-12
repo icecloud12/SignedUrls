@@ -1,6 +1,6 @@
-use axum::{Router, routing::post};
+use axum::{Router, routing::{post, get}};
 use crate::project::handlers::create_project;
-use crate::request::handlers::create_upload_request;
+use crate::request::handlers::{create_upload_request, process_preview_request};
 use crate::signed_url::handlers::process_signed_url_upload_request;
 
 pub async fn router()->axum::Router {
