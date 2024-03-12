@@ -4,15 +4,17 @@ use serde::{Deserialize, Serialize};
 #[derive(Deserialize,Serialize)]
 pub struct CreateSignaturePostRequestOptions{
     pub is_consumable: Option<bool>,
-    pub is_consumed: Option<bool>
+    pub is_consumed: Option<bool>,
+    pub is_public: Option<bool>
     
 }
 #[derive(Deserialize)]
 pub struct CreateSignedUrlPostRequest {
     pub project_name: Option<String>, //deserialization would throw an error and panics the program
     pub duration: Option<u64>, // defaults to env DEFAULT_DURATION variable
+    pub target: Option<String>, //target destination appended to the project-name as the path dir to upload,
     pub is_consumable: Option<bool>,//defaults false
-    pub target: Option<String> //target destination appended to the project-name as the path dir to upload
+    pub is_public: Option<bool>, //when uploaded file becomes a public file where anybody can see
 }
 
 #[derive(Deserialize, Serialize)]

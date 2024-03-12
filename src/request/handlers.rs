@@ -1,17 +1,24 @@
+
+
+use std::str::FromStr;
+
 use hyper::StatusCode;
 use serde_json::json;
 use axum::{
     response:: IntoResponse,
-    extract::Json
+    body::{BodyDataStream, Body},
+
+    extract::{Json, Path}
 };
-use mongodb::Database;
-use crate::network::DbCollection;
+use mongodb::{bson::{doc, oid::ObjectId}, Database};
+use crate::{file::model::FileDocument, network::DbCollection};
 use crate::network::db_connection::DATABASE;
 use crate::project::actions::get_project_id_by_name;
 use crate::signed_url::actions::{
     CreateHashedSignatureResult,
     create_hashed_signature
 };
+use tokio_util::io::ReaderStream;
 use super::model::{CreateSignaturePostRequestOptions, CreateSignedUrlPostRequest, InsertRequest, UploadRequest};
 
 
@@ -22,6 +29,7 @@ pub async fn create_upload_request(Json(post_request):Json<CreateSignedUrlPostRe
         duration, 
         is_consumable: _,
         target ,
+        is_public
     }
      = post_request;
     let permission = "upload".to_string();
@@ -39,7 +47,6 @@ pub async fn create_upload_request(Json(post_request):Json<CreateSignedUrlPostRe
                 &duration.unwrap_or_else(|| std::env::var("DEFAULT_DURATION_AS_SECONDS").unwrap().to_string().parse::<u64>().unwrap()),
                 &permission.clone());
             
-            
             let doc: UploadRequest = UploadRequest {
                 project_name: project_name.unwrap(), //we use the id when we can find the name
                 date_created: created_hashed_signature.date_created.clone(),
@@ -47,6 +54,7 @@ pub async fn create_upload_request(Json(post_request):Json<CreateSignedUrlPostRe
                 options:  CreateSignaturePostRequestOptions {
                     is_consumable: post_request.is_consumable.clone(),
                     is_consumed: Some(false),
+                    is_public: Some(is_public).unwrap_or_else(|| Some(false))
                 },
                 permission: permission.clone(),
                 target: target.unwrap()
@@ -70,3 +78,28 @@ pub async fn create_upload_request(Json(post_request):Json<CreateSignedUrlPostRe
 
 }
 
+pub async fn preview_file( Path(params): Path<Vec<(String, String)>>) -> impl IntoResponse{
+    let file_id = params[0].1.clone();
+    //check if file is public
+    let database = DATABASE.get().unwrap();
+    let file_ref = database.collection::<FileDocument>(DbCollection::FILE.to_string().as_str()).find_one(doc!{ "_id": ObjectId::from_str(&file_id).unwrap()}, None).await.unwrap();
+    
+    match file_ref {
+        Some(fileDoc)=>{
+            let path = std::path::PathBuf::from(fileDoc.path.clone());
+            let file = match tokio::fs::File::open(path).await {
+                Ok(file) => file,
+                Err(err) => return Err((StatusCode::NOT_FOUND, format!("File not found: {}", err))),
+            };
+            
+            // convert the `AsyncRead` into a `Stream`
+            let stream = ReaderStream::new(file);
+            // convert the `Stream` into an `axum::body::HttpBody`
+            let body = Body::from_stream(stream);
+        
+            return Ok(StatusCode::OK,body).into_response();
+        },
+        None => return (StatusCode::NOT_FOUND, "file not found")
+    };
+    
+}

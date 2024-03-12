@@ -167,16 +167,18 @@ pub async fn save_files_to_directory(
     let mut created_files: Vec<super::models::File> = vec![];
     while let Some(part) = multipart.next_field().await.unwrap(){
         if(part.name().unwrap_or_else(|| "")) == "files" {
-
             match part.file_name(){
                 Some(file_name) => {
                     //file_name.to_string()
                     let original_file_name = file_name.to_string();
                     let file_bytes = part.bytes().await.unwrap();
+                    let is_public = request_entry.options.is_public.unwrap_or_else(|| false);
                     let file_document_insert: FileDocumentInsertRow = FileDocumentInsertRow {
                         file_name : original_file_name.clone(),
                         path: initial_path.to_str().unwrap().to_string(),
-                        options: FileDocumentOptions{}
+                        options: FileDocumentOptions{
+                            is_public: is_public
+                        }
                     };
                     let insert_file_insert_result: InsertOneResult = db.collection::<FileDocumentInsertRow>(DbCollection::FILE.to_string().as_str()).insert_one(file_document_insert, None).await.unwrap();
                     let new_file_name = insert_file_insert_result.inserted_id.as_object_id().unwrap().to_string();
@@ -186,12 +188,8 @@ pub async fn save_files_to_directory(
                     file.write(&file_bytes).await.unwrap();
                     created_files.push( super::models::File{
                         _id: new_file_name,
-                        request_id: request_id.clone(),
-                        path: initial_path.to_str().unwrap().to_string().split("/data").last().unwrap().to_string(),
                         file_name:original_file_name,
-                        public_url:None
                     })
-
                 },
                 None => {}
             };
@@ -203,6 +201,7 @@ pub async fn save_files_to_directory(
 
     Ok(SaveFilesToDirectoryResult {
         request_id: request_id,
+        path: initial_path.to_str().unwrap().to_string().split("/data").last().unwrap().to_string(),
         files: created_files
     })
 }
