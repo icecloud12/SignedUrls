@@ -4,30 +4,34 @@ use std::fs;
 
 use crate::network::{db_connection::DATABASE, DbCollection};
 use super::models::{ProjectDocument, ProjectModel};
+use rand::{self, distributions::Alphanumeric, Rng, RngCore};
 
-pub async fn insert_project_if_exists( project_name:&String) -> Option<String>{
+pub async fn insert_project_if_exists( project_name:&String) -> Option<(String, String)>{
     let db= DATABASE.get().unwrap();
 
     //check if exists
-    let if_exist_result = db.collection::<ProjectDocument>(DbCollection::PROJECT.to_string().as_str()).find_one(doc! {
+    let if_exist_result: Result<Option<ProjectDocument>, mongodb::error::Error> = db.collection::<ProjectDocument>(DbCollection::PROJECT.to_string().as_str()).find_one(doc! {
         "name": project_name.as_str()
     }, None).await;
     
     
-    let x: Option<String> = match if_exist_result {
+    let x: Option<(String,String)> = match if_exist_result {
         Ok(o_project_model) => {
-            let y:String = match o_project_model {
+            let y:(String,String) = match o_project_model {
                 Some(model) => {
                     let id = model._id.to_string();
-                    id
+                    let api_key = model.api_key;
+                    (id, api_key)
                 },
                 None => {
+                    let api_key:String = rand::thread_rng().sample_iter(Alphanumeric).take(256).map(char::from).collect();
                     let doc= ProjectModel{
-                        name: project_name.to_string()
+                        name: project_name.to_string(),
+                        api_key: api_key.clone()
                     };
                     let insert_one_result = db.collection::<ProjectModel>(DbCollection::PROJECT.to_string().as_str()).insert_one(doc, None).await.unwrap();
                     let id = insert_one_result.inserted_id.as_object_id().unwrap().to_string();
-                    id
+                    (id, api_key)
                 }
             };
             Some(y)

@@ -15,11 +15,12 @@ pub async fn create_project(Json(post_request):Json<CreateProjectPostRequest>) -
     let _db: &mongodb::Database = DATABASE.get().unwrap();
     //check if exist
     let create_request = actions::insert_project_if_exists( &post_request.name).await;
+        
     match create_request {
-        Some(request) => {
+        Some((request_id, api_key)) => {
             //then create directory
-            actions::create_project_directory(&request).await;
-            let j = json!({"data":{"id":request, "project_name": post_request.name.as_str()}, "message":"success"});
+            actions::create_project_directory(&request_id).await;
+            let j = json!({"data":{"id":request_id, "project_name": post_request.name.as_str(), "api_key": api_key }, "message":"success"});
 
             return (StatusCode::CREATED, Json(j)).into_response();
         },

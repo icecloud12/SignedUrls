@@ -151,7 +151,9 @@ pub async fn save_files_to_directory(
     let request_entry = db.collection::<UploadRequest>(DbCollection::REQUEST.to_string().as_str()).find_one(doc!{"_id": ObjectId::from_str(request_id.as_str()).unwrap()}, None).await.unwrap().unwrap();
 
     let project_name = request_entry.project_name;
-    let initial_path: std::path::PathBuf = std::path::PathBuf::from("./data/").join(format!("{}/",project_name)).join(format!("{}/",request_entry.target));
+    let project_doc = db.collection::<ProjectDocument>(DbCollection::PROJECT.to_string().as_str()).find_one(doc!{"name":project_name}, None).await.unwrap().unwrap();
+    let project_id = project_doc._id.to_hex();
+    let initial_path: std::path::PathBuf = std::path::PathBuf::from("./data/").join(format!("{}/",project_id)).join(format!("{}/",request_entry.target));
 
     if !(fs::metadata(&initial_path).is_ok() && fs::metadata(&initial_path).expect("").is_dir()){
         match std::fs::create_dir_all(&initial_path) {
