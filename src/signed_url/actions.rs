@@ -101,8 +101,8 @@ pub async fn validate_signed_url(
             if request_entry.is_ok(){
                 let entry = request_entry.unwrap().unwrap();
                 
-                let project_name = entry.project_name;
-                let project_entry = db.collection::<ProjectDocument>(DbCollection::PROJECT.to_string().as_str()).find_one(doc! {"name": project_name}, None).await.unwrap().unwrap();
+                let project_id = entry.project_id;
+                let project_entry = db.collection::<ProjectDocument>(DbCollection::PROJECT.to_string().as_str()).find_one(doc! {"_id": ObjectId::from_str(&project_id).unwrap()}, None).await.unwrap().unwrap();
 
                 let replicated_hash = hash_parameters(&project_entry._id.to_string(), &from_str::<u64>(&created).unwrap(), &from_str::<u64>(&expiration).unwrap(), &permission.to_string(), &from_str::<u64>(&nonce).unwrap());
                
@@ -150,8 +150,8 @@ pub async fn save_files_to_directory(
     let db: &Database = DATABASE.get().unwrap();
     let request_entry = db.collection::<UploadRequest>(DbCollection::REQUEST.to_string().as_str()).find_one(doc!{"_id": ObjectId::from_str(request_id.as_str()).unwrap()}, None).await.unwrap().unwrap();
 
-    let project_name = request_entry.project_name;
-    let project_doc = db.collection::<ProjectDocument>(DbCollection::PROJECT.to_string().as_str()).find_one(doc!{"name":project_name}, None).await.unwrap().unwrap();
+    let project_id = request_entry.project_id;
+    let project_doc = db.collection::<ProjectDocument>(DbCollection::PROJECT.to_string().as_str()).find_one(doc!{"_id": ObjectId::from_str(project_id.as_str()).unwrap()}, None).await.unwrap().unwrap();
     let project_id = project_doc._id.to_hex();
     let initial_path: std::path::PathBuf = std::path::PathBuf::from("./data/").join(format!("{}/",project_id)).join(format!("{}/",request_entry.target));
 
@@ -169,6 +169,7 @@ pub async fn save_files_to_directory(
     let mut created_files: Vec<super::models::File> = vec![];
     while let Some(part) = multipart.next_field().await.unwrap(){
         if(part.name().unwrap_or_else(|| "")) == "files" {
+            println!("{:#?}",part);
             match part.file_name(){
                 Some(file_name) => {
                     //file_name.to_string()

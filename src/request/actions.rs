@@ -5,7 +5,7 @@ use mongodb::bson::oid::ObjectId;
 
 use crate::{file::model::FileDocument, network::DbCollection};
 use crate::network::db_connection::DATABASE;
-pub async fn file_reference_is_valid(file_id:ObjectId)->Result<(FileDocument),((StatusCode, String))>{
+pub async fn file_reference_is_valid(file_id:ObjectId)->Result< FileDocument,(StatusCode, String)>{
     let db = DATABASE.get().unwrap();
     let file_ref:Result<Option<FileDocument>, mongodb::error::Error> = db.collection::<FileDocument>(DbCollection::FILE.to_string().as_str()).find_one(doc!{ "_id": file_id}, None).await;
     match file_ref {

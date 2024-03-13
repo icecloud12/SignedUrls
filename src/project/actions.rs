@@ -4,7 +4,7 @@ use std::fs;
 
 use crate::network::{db_connection::DATABASE, DbCollection};
 use super::models::{ProjectDocument, ProjectModel};
-use rand::{self, distributions::Alphanumeric, Rng, RngCore};
+use rand::{self, distributions::Alphanumeric, Rng};
 
 pub async fn insert_project_if_exists( project_name:&String) -> Option<(String, String)>{
     let db= DATABASE.get().unwrap();
@@ -65,6 +65,30 @@ pub async fn create_project_directory(project_id:&String)  {
 pub async fn get_project_id_by_name(project_name:String) -> Option<String>{
     let db: &Database = DATABASE.get().unwrap();
     let if_exist_result: Result<Option<ProjectDocument>, mongodb::error::Error> = db.collection::<ProjectDocument>(DbCollection::PROJECT.to_string().as_str()).find_one(doc! {"name":project_name.as_str()}, None).await;
+
+    let x:Option<String> = match  if_exist_result {
+        Ok(y)=>{
+            let z:Option<String> = match y {
+                Some(a) => {
+                    let id:String = a._id.to_string();
+                    Some(id)
+                },
+                None => {
+                    None
+                }
+            };
+            z
+        },
+        Err(_error) => {
+            None
+        }
+    };
+    return x;
+
+}
+pub async fn get_project_id_by_api_key(api_key:String) -> Option<String>{
+    let db: &Database = DATABASE.get().unwrap();
+    let if_exist_result: Result<Option<ProjectDocument>, mongodb::error::Error> = db.collection::<ProjectDocument>(DbCollection::PROJECT.to_string().as_str()).find_one(doc! {"api_key":api_key.as_str()}, None).await;
 
     let x:Option<String> = match  if_exist_result {
         Ok(y)=>{

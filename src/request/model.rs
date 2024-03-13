@@ -10,7 +10,7 @@ pub struct CreateSignaturePostRequestOptions{
 }
 #[derive(Deserialize)]
 pub struct CreateSignedUrlPostRequest {
-    pub project_name: Option<String>, //deserialization would throw an error and panics the program
+    //pub project_name: Option<String>, //deserialization would throw an error and panics the program (Deprecated and is moved to APIKEY headers)
     pub duration: Option<u64>, // defaults to env DEFAULT_DURATION variable
     pub target: Option<String>, //target destination appended to the project-name as the path dir to upload,
     pub is_consumable: Option<bool>,//defaults false
@@ -19,7 +19,7 @@ pub struct CreateSignedUrlPostRequest {
 
 #[derive(Deserialize, Serialize)]
 pub struct InsertRequest{
-    pub project_name: String,
+    pub project_id: String,
     pub date_created: u64,
     pub expiration_date: u64,
     pub options:CreateSignaturePostRequestOptions,
@@ -27,7 +27,7 @@ pub struct InsertRequest{
 }
 #[derive(Deserialize, Serialize)]
 pub struct UploadRequest {
-    pub project_name: String,
+    pub project_id: String,
     pub date_created: u64,
     pub expiration_date: u64,
     pub options:CreateSignaturePostRequestOptions,
@@ -39,7 +39,7 @@ pub struct UploadRequest {
 #[derive(Deserialize, Debug, Serialize)]
 pub struct RequestDocument {
     pub _id:ObjectId,
-    pub project_name: String,
+    pub project_id: String,
     pub date_created: u64,
     pub expiration_date: u64,
     pub options:RequestDocumentOptions,

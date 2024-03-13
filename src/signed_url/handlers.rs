@@ -16,7 +16,7 @@ pub async fn process_signed_url_upload_request(
 )-> impl IntoResponse{
     //validate the url
     let collected_params = params.iter().map(|param| param.1.clone()).collect::<Vec<String>>();
-    let request_id = collected_params[0].clone();
+    let request_id: String = collected_params[0].clone();
 
     if validate_signed_url(collected_params, "upload").await{
         let save_files_to_directory_result  = save_files_to_directory(request_id,multipart).await;
