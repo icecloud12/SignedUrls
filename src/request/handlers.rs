@@ -7,29 +7,31 @@ use serde_json::json;
 use axum::{
     body::Body, extract::{Json, Path}, response:: IntoResponse
 };
-use mongodb::{bson::oid::ObjectId, Database};
-use crate::network::DbCollection;
+use mongodb::{bson::{doc, oid::ObjectId}, Database};
+use crate::{network::DbCollection, project::models::ProjectDocument};
 use crate::network::db_connection::DATABASE;
 use crate::project::actions::{
-    get_project_id_by_api_key,
-    get_project_id_by_name
+    validate_api_key
 };
 use crate::signed_url::actions::{
     CreateHashedSignatureResult,
     create_hashed_signature
 };
 use tokio_util::io::ReaderStream;
-use super::model::{CreateSignaturePostRequestOptions, CreateSignedUrlPostRequest, UploadRequest};
+use super::model::{
+    //post_request
+    CreateSignaturePostRequestOptions, 
+    CreateSignedUrlPostRequest, 
+    UploadRequest,
+    //view request
+    CreateSignedUrlViewRequest
+};
 use super::actions::file_reference_is_valid;
 
 pub async fn create_upload_request(headers:HeaderMap ,Json(post_request):Json<CreateSignedUrlPostRequest>) -> impl IntoResponse{
 
-    match headers.get("API_KEY") {
-        Some(api_key_header)=>{
-            //println!("{}", api_key_header.to_str().unwrap().to_string());
-            let api_key = api_key_header.to_str().unwrap().to_string();
-
-
+    match validate_api_key(headers).await{
+        Some(project_doc)=>{
             let CreateSignedUrlPostRequest{
                 duration, 
                 is_consumable: _,
@@ -37,60 +39,44 @@ pub async fn create_upload_request(headers:HeaderMap ,Json(post_request):Json<Cr
                 is_public
             }
             = post_request;
-            let db: &Database = DATABASE.get().unwrap();
-            //get project_name based from the API key
-            let project_name: Option<String> = Some("".to_string());
             let permission = "upload".to_string();
-            if project_name.is_some() {
-                //let project_name = post_request.project_name.unwrap(); 
-                let project_id_fetch = get_project_id_by_api_key(api_key).await;
-        
-                if project_id_fetch.is_some() {
-                    
-                    let address=std::env::var("ADDRESS").unwrap();
-                    let port = std::env::var("PORT").unwrap();
-        
-                    let created_hashed_signature:CreateHashedSignatureResult = create_hashed_signature(
-                        &project_id_fetch.clone().unwrap(), 
-                        &duration.unwrap_or_else(|| std::env::var("DEFAULT_DURATION_AS_SECONDS").unwrap().to_string().parse::<u64>().unwrap()),
-                        &permission.clone());
-                    
-                    let doc: UploadRequest = UploadRequest {
-                        project_id: project_id_fetch.unwrap(), //we use the id when we can find the name
-                        date_created: created_hashed_signature.date_created.clone(),
-                        expiration_date: created_hashed_signature.expiration_date.clone(),
-                        options:  CreateSignaturePostRequestOptions {
-                            is_consumable: post_request.is_consumable.clone(),
-                            is_consumed: Some(false),
-                            is_public: Some(is_public).unwrap_or_else(|| Some(false))
-                        },
-                        permission: permission.clone(),
-                        target: target.unwrap()
-                    };
-        
-                    
-                    let insert_request_id = &db.collection::<UploadRequest>(DbCollection::REQUEST.to_string().as_str()).insert_one(doc, None).await.unwrap().inserted_id.as_object_id().unwrap().to_string();
-                
-                    let generated_url:String = format!("{}:{}/id/{}/permission/{}/created/{}/expiration/{}/nonce/{}/signature/{}",address, port, insert_request_id, permission,created_hashed_signature.date_created,created_hashed_signature.expiration_date,created_hashed_signature.nonce,created_hashed_signature.hashed_signature_base_64);
-                    return (StatusCode::CREATED, Json(json!(
-                        {"data":{
-                            "request_id": insert_request_id,
-                            "url": generated_url
-                        }
-                    })));
+            let project_id = project_doc._id.to_hex();
+            let address=std::env::var("ADDRESS").unwrap();
+            let port = std::env::var("PORT").unwrap();
+            let created_hashed_signature:CreateHashedSignatureResult = create_hashed_signature(
+                &project_id.clone(), 
+                &duration.unwrap_or_else(|| std::env::var("DEFAULT_DURATION_AS_SECONDS").unwrap().to_string().parse::<u64>().unwrap()),
+                &permission.clone()
+            );
+            let doc: UploadRequest = UploadRequest {
+                project_id: project_id,
+                date_created: created_hashed_signature.date_created.clone(),
+                expiration_date: created_hashed_signature.expiration_date.clone(),
+                options:  CreateSignaturePostRequestOptions {
+                    is_consumable: post_request.is_consumable.clone(),
+                    is_consumed: Some(false),
+                    is_public: Some(is_public).unwrap_or_else(|| Some(false))
+                },
+                permission: permission.clone(),
+                target: target.unwrap()
+            };
+            let db: &Database = DATABASE.get().unwrap();
+            let insert_request_id = &db.collection::<UploadRequest>(DbCollection::REQUEST.to_string().as_str()).insert_one(doc, None).await.unwrap().inserted_id.as_object_id().unwrap().to_string();
+            let generated_url:String = format!("{}:{}/id/{}/permission/{}/created/{}/expiration/{}/nonce/{}/signature/{}",address, port, insert_request_id, permission,created_hashed_signature.date_created,created_hashed_signature.expiration_date,created_hashed_signature.nonce,created_hashed_signature.hashed_signature_base_64);
+            return (StatusCode::CREATED, Json(json!(
+                {"data":{
+                    "request_id": insert_request_id,
+                    "url": generated_url
                 }
-            }
-            return (StatusCode::BAD_REQUEST, Json(json!(
-                {"data":None::<String>, "message":"Failed to create signed-url"}
-            )));
-
+            })));
         }
         None=>{
             return (StatusCode::BAD_REQUEST, Json(json!(
                 {"data":None::<String>, "message":"Failed to create signed-url"}
-            )))
+            )));
         }
-    };
+    }
+    
     
 
 }
@@ -127,3 +113,7 @@ pub async fn process_public_read_access( Path(params): Path<Vec<(String, String)
         }
     }
 }
+pub async fn create_view_request(headers:HeaderMap, Json(post_request): Json<CreateSignedUrlViewRequest>) -> impl IntoResponse {
+    
+}
+
