@@ -10,7 +10,7 @@ pub async fn router()->axum::Router {
         //HANDLE THE SIGNED URL
         .route("/id/:project_id/permission/upload/created/:created/expiration/:expiration/nonce/:nonce/signature/:signature", post(process_signed_url_upload_request))
         .route("/preview/:file_id", get(process_preview_request)) //public preview
-        .layer(DefaultBodyLimit::max(51200));
+        .layer(DefaultBodyLimit::disable());
     return router;
 
 }
