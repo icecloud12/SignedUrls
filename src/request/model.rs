@@ -17,12 +17,14 @@ pub struct CreateSignedUrlPostRequest {
     pub is_public: Option<bool>, //when uploaded file becomes a public file where anybody can see
 }
 
+
+
 #[derive(Deserialize, Serialize)]
-pub struct InsertRequest{
+pub struct GenericRequest{
     pub project_id: String,
     pub date_created: u64,
     pub expiration_date: u64,
-    pub options:CreateSignaturePostRequestOptions,
+    pub options:Option<CreateSignaturePostRequestOptions>,
     pub permission: String
 }
 #[derive(Deserialize, Serialize)]
@@ -50,4 +52,20 @@ pub struct RequestDocument {
 pub struct RequestDocumentOptions {
     pub is_consumable: bool,
     pub is_consumed: bool
+}
+
+//accepts a duration in seconds and a vector of file_ids
+#[derive(Deserialize)]
+pub struct CreateSignedUrlViewRequest{
+    pub duration: Option<u64>,
+    pub file_id_collection:Option<Vec<String>>,
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct ViewRequest {
+    pub project_id: String,
+    pub date_created: u64,
+    pub expiration_date: u64,
+    pub permission: String,
+    pub files:Vec<String>
 }

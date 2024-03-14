@@ -8,7 +8,7 @@ use axum::{
     body::Body, extract::{Json, Path}, response:: IntoResponse
 };
 use mongodb::{bson::{doc, oid::ObjectId}, Database};
-use crate::{network::DbCollection, project::models::ProjectDocument};
+use crate::{network::DbCollection, project::{self, models::ProjectDocument}};
 use crate::network::db_connection::DATABASE;
 use crate::project::actions::{
     validate_api_key
@@ -20,11 +20,7 @@ use crate::signed_url::actions::{
 use tokio_util::io::ReaderStream;
 use super::model::{
     //post_request
-    CreateSignaturePostRequestOptions, 
-    CreateSignedUrlPostRequest, 
-    UploadRequest,
-    //view request
-    CreateSignedUrlViewRequest
+    CreateSignaturePostRequestOptions, CreateSignedUrlPostRequest, CreateSignedUrlViewRequest, UploadRequest, ViewRequest
 };
 use super::actions::file_reference_is_valid;
 
@@ -114,6 +110,45 @@ pub async fn process_public_read_access( Path(params): Path<Vec<(String, String)
     }
 }
 pub async fn create_view_request(headers:HeaderMap, Json(post_request): Json<CreateSignedUrlViewRequest>) -> impl IntoResponse {
-    
+    match validate_api_key(headers).await {
+        Some(project_doc)=>{
+            let CreateSignedUrlViewRequest {
+                duration,
+                file_id_collection
+            } = post_request;
+            let permission = "view".to_string();
+            let project_id = project_doc._id.to_hex();
+            let address=std::env::var("ADDRESS").unwrap();
+            let port = std::env::var("PORT").unwrap();
+            let created_hashed_signature:CreateHashedSignatureResult = create_hashed_signature(
+                &project_id.clone(), 
+                &duration.unwrap_or_else(|| std::env::var("DEFAULT_DURATION_AS_SECONDS").unwrap().to_string().parse::<u64>().unwrap()),
+                &permission.clone()
+            );
+            let doc: ViewRequest = ViewRequest{
+                project_id: project_id,
+                date_created: created_hashed_signature.date_created,
+                expiration_date: created_hashed_signature.expiration_date,
+                permission: permission.clone(),
+                files: file_id_collection.unwrap()
+            };
+
+            let db:&Database = DATABASE.get().unwrap();
+            let insert_request_id = &db.collection::<ViewRequest>(DbCollection::REQUEST.to_string().as_str()).insert_one(doc, None).await.unwrap().inserted_id.as_object_id().unwrap().to_string();
+            let generated_url:String = format!("{}:{}/id/{}/permission/{}/created/{}/expiration/{}/nonce/{}/signature/{}",address, port, insert_request_id, permission,created_hashed_signature.date_created,created_hashed_signature.expiration_date,created_hashed_signature.nonce,created_hashed_signature.hashed_signature_base_64);
+            return (StatusCode::CREATED, Json(json!(
+                {"data":{
+                    "request_id": insert_request_id,
+                    "url": generated_url
+                }
+            })));
+
+        },
+        None => {
+            return (StatusCode::BAD_REQUEST, Json(json!(
+                {"data":None::<String>, "message":"Failed to create signed-url"}
+            )));
+        }
+    }   
 }
 
