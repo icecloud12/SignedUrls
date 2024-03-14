@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 pub struct File{
     pub _id:String,
     pub file_name:String, //original name,
+    pub path:String,
 }
 
 #[derive(Deserialize, Serialize, Debug)]

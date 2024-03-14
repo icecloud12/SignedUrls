@@ -4,7 +4,7 @@ use serde_json::from_str;
 use sha3::{Digest, Sha3_256};
 use rand::{self, Rng};
 use std::{
-    fs, num::ParseIntError, str::FromStr, time::{
+    fs, num::ParseIntError, path::PathBuf, str::FromStr, time::{
         SystemTime, UNIX_EPOCH
     }
 };
@@ -155,21 +155,11 @@ pub async fn save_files_to_directory(
     let project_id = project_doc._id.to_hex();
     let initial_path: std::path::PathBuf = std::path::PathBuf::from("./data/").join(format!("{}/",project_id)).join(format!("{}/",request_entry.target));
 
-    if !(fs::metadata(&initial_path).is_ok() && fs::metadata(&initial_path).expect("").is_dir()){
-        match std::fs::create_dir_all(&initial_path) {
-            Ok(_a) =>{
-                //do something on dir creation
-            },
-            Err(_) => {
-                println!("cannot create in this directory");
-                return Err(false)
-            }
-        }
-    }
+    
     let mut created_files: Vec<super::models::File> = vec![];
     while let Some(part) = multipart.next_field().await.unwrap(){
         if(part.name().unwrap_or_else(|| "")) == "files" {
-            println!("{:#?}",part);
+            println!("part: {:#?}",part);
             match part.file_name(){
                 Some(file_name) => {
                     //file_name.to_string()
@@ -185,20 +175,34 @@ pub async fn save_files_to_directory(
                     };
                     let insert_file_insert_result: InsertOneResult = db.collection::<FileDocumentInsertRow>(DbCollection::FILE.to_string().as_str()).insert_one(file_document_insert, None).await.unwrap();
                     let new_file_name = insert_file_insert_result.inserted_id.as_object_id().unwrap().to_string();
-                    let file_extention = original_file_name.split(".").last().unwrap();
-                    let new_file_path: String = initial_path.clone().join(format!("{}.{}",new_file_name,file_extention)).to_str().unwrap().to_string();
-                    let mut file:File = File::create(new_file_path.clone()).await.unwrap();
-                    file.write(&file_bytes).await.unwrap();
-                    created_files.push( super::models::File{
-                        _id: new_file_name,
-                        file_name:original_file_name,
-                    })
+                    let new_file_directory:PathBuf = initial_path.join(format!("{}/", new_file_name));
+                    if !(fs::metadata(&new_file_directory).is_ok() && fs::metadata(&new_file_directory).expect("").is_dir()){
+                        match std::fs::create_dir_all(&new_file_directory) {
+                            Ok(_a) =>{
+                                //do something on dir creation
+                                let file_extention = original_file_name.split(".").last().unwrap();
+                                let new_file_path: String = new_file_directory.clone().join(format!("{}.{}",new_file_name,file_extention)).to_str().unwrap().to_string();
+                                let mut file:File = File::create(new_file_path.clone()).await.unwrap();
+                                file.write(&file_bytes).await.unwrap();
+                                created_files.push( super::models::File{
+                                    _id: new_file_name,
+                                    file_name:original_file_name,
+                                    path: new_file_path.split("./data").last().unwrap().to_string()
+                                })
+                            },
+                            Err(_) => {
+                                println!("cannot create in this directory");
+                                return Err(false)
+                            }
+                        }
+                    }
+                    
                 },
                 None => {}
             };
             
         }
-        //index = index+1;
+        
     }
 
 

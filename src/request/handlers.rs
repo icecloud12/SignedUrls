@@ -95,7 +95,7 @@ pub async fn create_upload_request(headers:HeaderMap ,Json(post_request):Json<Cr
 
 }
 
-pub async fn process_preview_request( Path(params): Path<Vec<(String, String)>>) -> impl IntoResponse{
+pub async fn process_public_read_access( Path(params): Path<Vec<(String, String)>>) -> impl IntoResponse{
     let file_id = params[0].1.clone();
     //check if file is public
     let file_object_id = ObjectId::from_str(&file_id);
