@@ -44,7 +44,7 @@ pub struct RequestDocument {
     pub project_id: String,
     pub date_created: u64,
     pub expiration_date: u64,
-    pub options:RequestDocumentOptions,
+    pub options:Option<RequestDocumentOptions>,
     pub permission: String
 }
 
@@ -67,5 +67,6 @@ pub struct ViewRequest {
     pub date_created: u64,
     pub expiration_date: u64,
     pub permission: String,
-    pub files:Vec<String>
+    pub files:Vec<String>,
+    pub options: Option<CreateSignaturePostRequestOptions>
 }

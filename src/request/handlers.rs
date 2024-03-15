@@ -90,7 +90,8 @@ pub async fn process_public_read_access( Path(params): Path<Vec<(String, String)
 
                         let initial_path = std::path::PathBuf::from(file_document.path.clone());
                         let file_ext = file_document.file_name.split(".").last().unwrap();
-                        let path = initial_path.join(format!("{}.{}",file_document._id.to_hex(), file_ext));            
+                        let file_document_id = file_document._id.to_hex();
+                        let path = initial_path.join(format!("{}/{}.{}",file_document_id,file_document_id, file_ext));            
                         println!("filePath: {}",&path.as_os_str().to_str().unwrap().to_string());
                         let file = match tokio::fs::File::open(path).await {
                             Ok(file) => file,
@@ -130,7 +131,8 @@ pub async fn create_view_request(headers:HeaderMap, Json(post_request): Json<Cre
                 date_created: created_hashed_signature.date_created,
                 expiration_date: created_hashed_signature.expiration_date,
                 permission: permission.clone(),
-                files: file_id_collection.unwrap()
+                files: file_id_collection.unwrap(),
+                options:None
             };
 
             let db:&Database = DATABASE.get().unwrap();

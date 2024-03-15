@@ -90,14 +90,12 @@ pub async fn validate_signed_url(
     
     let created_time:Result<u64, ParseIntError> = created.parse();
     let expiration_time:Result<u64, ParseIntError> = expiration.parse();
-    
     if created_time.is_ok() && expiration_time.is_ok() {
         let current_time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
         if current_time >= created_time.unwrap() && current_time <= expiration_time.unwrap() {
         //fetch project_id from request id
             let db: &Database = DATABASE.get().unwrap();
             let request_entry = db.collection::<RequestDocument>(DbCollection::REQUEST.to_string().as_str()).find_one(doc!{"_id":ObjectId::from_str(&request_id).unwrap()}, None).await;
-            //println!("{:#?}",request_entry); 
             if request_entry.is_ok(){
                 let entry = request_entry.unwrap().unwrap();
                 
@@ -105,33 +103,35 @@ pub async fn validate_signed_url(
                 let project_entry = db.collection::<ProjectDocument>(DbCollection::PROJECT.to_string().as_str()).find_one(doc! {"_id": ObjectId::from_str(&project_id).unwrap()}, None).await.unwrap().unwrap();
 
                 let replicated_hash = hash_parameters(&project_entry._id.to_string(), &from_str::<u64>(&created).unwrap(), &from_str::<u64>(&expiration).unwrap(), &permission.to_string(), &from_str::<u64>(&nonce).unwrap());
-               
-                if replicated_hash == signature && !entry.options.is_consumed {
-                    if entry.options.is_consumable {
-                        let filter = doc! {"_id": entry._id};
-                        let update = doc!{
-                            "$set": {
-                                "options" : {
-                                    //you actually need to restructure it damn, TAKE NOTE OF UPDATING a SUBOBJECT
-                                    "is_consumbable": entry.options.is_consumable,
-                                    "is_consumed": true
-                                }
-                            }
-                        };
-                        
-                        let _update_result = db.collection::<ProjectDocument>(DbCollection::REQUEST.to_string().as_str()).update_one(
-                            filter,
-                            update,
-                            None
-                        ).await.unwrap();
-                        println!("update result {:#?}", _update_result)
-                    }
-                    return true
-                }
                 if replicated_hash == signature{
-                        println!("Signature is not valid");
-                }else if entry.options.is_consumed {
-                    println!("Signature is consumed");
+                    if entry.permission == "upload"{
+                        let options: crate::request::model::RequestDocumentOptions  = entry.options.unwrap();
+                        if options.is_consumable {
+                            let filter = doc! {"_id": entry._id};
+                            let update = doc!{
+                                "$set": {
+                                    "options" : {
+                                        //you actually need to restructure it damn, TAKE NOTE OF UPDATING a SUBOBJECT
+                                        "is_consumbable": options.is_consumable,
+                                        "is_consumed": true
+                                    }
+                                }
+                            };
+                            
+                            let _update_result = db.collection::<ProjectDocument>(DbCollection::REQUEST.to_string().as_str()).update_one(
+                                filter,
+                                update,
+                                None
+                            ).await.unwrap();
+                        }
+                        return true;
+                    }else if entry.permission == "view"{
+                        return true;
+                    }
+                    return false;
+                 
+                } else { //replicated_hash != signature
+                    return false;
                 }
             }
         }
