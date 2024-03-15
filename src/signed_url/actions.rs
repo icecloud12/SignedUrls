@@ -16,12 +16,14 @@ use crate::request::model::RequestDocument;
 use crate::file::model::FileDocumentOptions;
 pub enum ActionTypes {
     UPLOAD,
+    VIEW,
 }
 
 impl ToString for ActionTypes{
     fn to_string(&self)->String{
         match &self {
-            &Self::UPLOAD => "upload".to_string()
+            &Self::UPLOAD => "upload".to_string(),
+            &Self::VIEW => "view".to_string()
         }
     }
 }
@@ -104,7 +106,7 @@ pub async fn validate_signed_url(
 
                 let replicated_hash = hash_parameters(&project_entry._id.to_string(), &from_str::<u64>(&created).unwrap(), &from_str::<u64>(&expiration).unwrap(), &permission.to_string(), &from_str::<u64>(&nonce).unwrap());
                 if replicated_hash == signature{
-                    if entry.permission == "upload"{
+                    if entry.permission == ActionTypes::UPLOAD.to_string(){
                         let options: crate::request::model::RequestDocumentOptions  = entry.options.unwrap();
                         if options.is_consumable {
                             let filter = doc! {"_id": entry._id};
@@ -125,7 +127,7 @@ pub async fn validate_signed_url(
                             ).await.unwrap();
                         }
                         return true;
-                    }else if entry.permission == "view"{
+                    }else if entry.permission == ActionTypes::VIEW.to_string(){
                         return true;
                     }
                     return false;
