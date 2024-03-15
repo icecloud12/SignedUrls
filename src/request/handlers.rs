@@ -7,8 +7,8 @@ use serde_json::json;
 use axum::{
     body::Body, extract::{Json, Path}, response:: IntoResponse
 };
-use mongodb::{bson::{doc, oid::ObjectId}, Database};
-use crate::{network::DbCollection, project::{self, models::ProjectDocument}};
+use mongodb::{bson::oid::ObjectId, Database};
+use crate::{network::DbCollection, signed_url::actions::ActionTypes};
 use crate::network::db_connection::DATABASE;
 use crate::project::actions::{
     validate_api_key
@@ -35,7 +35,7 @@ pub async fn create_upload_request(headers:HeaderMap ,Json(post_request):Json<Cr
                 is_public
             }
             = post_request;
-            let permission = "upload".to_string();
+            let permission = ActionTypes::UPLOAD.to_string();
             let project_id = project_doc._id.to_hex();
             let address=std::env::var("ADDRESS").unwrap();
             let port = std::env::var("PORT").unwrap();
@@ -117,7 +117,7 @@ pub async fn create_view_request(headers:HeaderMap, Json(post_request): Json<Cre
                 duration,
                 file_id_collection
             } = post_request;
-            let permission = "view".to_string();
+            let permission = ActionTypes::VIEW.to_string();
             let project_id = project_doc._id.to_hex();
             let address=std::env::var("ADDRESS").unwrap();
             let port = std::env::var("PORT").unwrap();
