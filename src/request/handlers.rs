@@ -137,11 +137,11 @@ pub async fn create_view_request(headers:HeaderMap, Json(post_request): Json<Cre
 
             let db:&Database = DATABASE.get().unwrap();
             let insert_request_id = &db.collection::<ViewRequest>(DbCollection::REQUEST.to_string().as_str()).insert_one(doc, None).await.unwrap().inserted_id.as_object_id().unwrap().to_string();
-            let generated_url:String = format!("{}:{}/id/{}/permission/{}/created/{}/expiration/{}/nonce/{}/signature/{}",address, port, insert_request_id, permission,created_hashed_signature.date_created,created_hashed_signature.expiration_date,created_hashed_signature.nonce,created_hashed_signature.hashed_signature_base_64);
+            let generated_url:String = format!("{}:{}/id/{}/permission/{}/created/{}/expiration/{}/nonce/{}/signature/{}/file/",address, port, insert_request_id, permission,created_hashed_signature.date_created,created_hashed_signature.expiration_date,created_hashed_signature.nonce,created_hashed_signature.hashed_signature_base_64);
             return (StatusCode::CREATED, Json(json!(
                 {"data":{
                     "request_id": insert_request_id,
-                    "url": generated_url
+                    "base_url": generated_url
                 }
             })));
 
