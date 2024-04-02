@@ -1,15 +1,15 @@
-use axum::{body::Bytes, extract::{multipart,  Multipart}};
+use axum::{body::Bytes, extract::{multipart,  Multipart}, Error};
 use mongodb::{bson::{doc, oid::ObjectId}, results::InsertOneResult, Database};
 use serde_json::from_str;
 use sha3::{Digest, Sha3_256};
 use rand::{self, Rng};
 use std::{
-    f32::consts::E, fs, num::ParseIntError, path::PathBuf, str::FromStr, time::{
+    f32::consts::E, fs, num::ParseIntError, os::windows::fs::MetadataExt, path::PathBuf, str::FromStr, time::{
         SystemTime, UNIX_EPOCH
     }
 };
 use super::models::SaveFilesToDirectoryResult;
-use crate::{ file::model::FileDocumentInsertRow, network::{db_connection::DATABASE, DbCollection}, project:: models::ProjectDocument, request::model::UploadRequest};
+use crate::{ file::{self, model::FileDocumentInsertRow}, network::{db_connection::DATABASE, DbCollection}, project:: models::ProjectDocument, request::model::UploadRequest};
 
 use tokio::{fs::File, io::AsyncWriteExt};
 use crate::request::model::RequestDocument;
@@ -226,29 +226,44 @@ pub async fn save_file_to_directory(original_file_name:String, new_file_name:Str
 }
 pub struct multipartFile {
     pub file_name: String,
-    pub bytes: Bytes
+    pub bytes: Bytes,
+    pub file_size_is_valid:bool
 }
-pub async fn direct_upload_extract_multipart(mut multipart:Multipart)-> Result<(Vec<multipartFile>, String, bool, bool), String> {
+pub struct InterceptedFile {
+    pub file_name: String,
+    pub bytes: Bytes,
+}
+pub async fn direct_upload_extract_multipart(mut multipart:Multipart)-> Result<(Vec<multipartFile>, String, bool, bool, usize), String> {
     let mut multipart_files:Vec<multipartFile> = Vec::new();
+    let mut intercepted_files:Vec<InterceptedFile> = Vec::new();
+
     let mut target: String = String::new();
     let mut is_public:bool = false; //default
     let mut is_consumable:bool = false;//default
+    let mut max_file_size:usize = usize::MAX;
     
     let mut atleast_one_file: bool = false;
     let mut target_is_set:bool = false;
+    let mut max_size_is_ok:bool = true;
 
-    while let Some(part)  =  multipart.next_field().await.unwrap(){
-        
-        let name = part.name();
+
+    while let Some(mut part)  =  multipart.next_field().await.unwrap(){
         
         match part.name() {
             Some(part_name)=>{
                 if part_name == "files" {
-                    multipart_files.push(multipartFile {
-                        file_name:  part.file_name().unwrap().to_string(),
-                        bytes: part.bytes().await.unwrap()
+                    let file_name = &part.file_name().unwrap().to_string();
+                    let file_bytes = &part.bytes().await.unwrap();
+                    
+                    
+                    let file_size_is_valid = file_bytes.to_vec().len() <= max_file_size;
+                    intercepted_files.push(InterceptedFile {
+                        file_name:  file_name.clone(),
+                        bytes: file_bytes.clone(),
+                        //file_size_is_valid: file_size_is_valid
                     });
                     atleast_one_file = true;
+                 
                 } else if part_name == "target"{
                     target = std::str::from_utf8(part.bytes().await.unwrap().into_iter().collect::<Vec<u8>>().as_ref()).unwrap().to_string();
                     target_is_set = true;
@@ -257,6 +272,16 @@ pub async fn direct_upload_extract_multipart(mut multipart:Multipart)-> Result<(
 
                 } else if part_name == "is_consumable" {
                     is_consumable = std::str::from_utf8(part.bytes().await.unwrap().into_iter().collect::<Vec<u8>>().as_ref()).unwrap() == "true".to_string()
+                } else if part_name == "max_file_size" {//in bytes
+                    match std::str::from_utf8(part.bytes().await.unwrap().into_iter().collect::<Vec<u8>>().as_ref()).unwrap().to_string().parse::<usize>(){
+                        Ok(val) => {
+                            max_file_size = val;
+                        },
+                        Err(_) => {
+                            max_size_is_ok = false
+                        }
+                        
+                    }
                 }
             },
             None =>{
@@ -264,12 +289,24 @@ pub async fn direct_upload_extract_multipart(mut multipart:Multipart)-> Result<(
 
         }
     }
-    if atleast_one_file && target_is_set {
-        return Ok((multipart_files, target, is_public,is_consumable ))
+    for intercepted_file in intercepted_files {
+            let file_size_is_valid = intercepted_file.bytes.to_vec().len() <= max_file_size;
+            multipart_files.push(multipartFile {
+                file_name:  intercepted_file.file_name.clone(),
+                bytes: intercepted_file.bytes.clone(),
+                file_size_is_valid: file_size_is_valid
+            });
+    }
+
+    if atleast_one_file && target_is_set && max_size_is_ok{
+        return Ok((multipart_files, target, is_public,is_consumable, max_file_size ))
     }else{
-        if atleast_one_file {
+        if !atleast_one_file {
             return Err("no files sent".to_string())
+        }else if !target_is_set {
+            return Err("target is not set".to_string())
+        }else{
+            return Err("max_file_size value is not valid".to_string())
         }
-        return Err("target is not set".to_string())
     }
 }

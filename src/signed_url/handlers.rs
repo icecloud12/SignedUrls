@@ -89,7 +89,8 @@ pub async fn direct_upload(headermap:HeaderMap, multipart: Multipart) -> impl In
     let response = match validate_api_key(headermap).await {
         Some(project_document) => {
             match direct_upload_extract_multipart(multipart).await{
-                Ok((multi_part_files, target, is_public,is_consumable))=>{
+                Ok((multi_part_files, target, is_public,is_consumable, max_file_size))=>{
+                    
                     //create a request of type direct-upload
                     let db = DATABASE.get().unwrap();
                     let doc = DirectUploadRequest {
@@ -114,60 +115,70 @@ pub async fn direct_upload(headermap:HeaderMap, multipart: Multipart) -> impl In
                     
                     //insert all images to directory
                     for mulitipart_file in multi_part_files {
-                        
-                        let file_document_insert = FileDocumentInsertRow {
-                            file_name : mulitipart_file.file_name.clone(),
-                            path: initial_path.to_str().unwrap().to_string(),
-                            options: FileDocumentOptions {
-                                is_public: is_public
-                            }
-                        };
-                        let insert_file_insert_result: InsertOneResult = db.collection::<FileDocumentInsertRow>(DbCollection::FILE.to_string().as_str()).insert_one(file_document_insert, None).await.unwrap();
-
-                        let new_file_name = insert_file_insert_result.inserted_id.as_object_id().unwrap().to_string();
-                        let new_file_directory:PathBuf = initial_path.join(format!("{}/", new_file_name));
-                        let create_file_directory_result = if !(std::fs::metadata(&new_file_directory).is_ok() && std::fs::metadata(&new_file_directory).expect("").is_dir()){
-                            match std::fs::create_dir_all(&new_file_directory) {
-                                Ok(_)=>{
-                                    Ok(())
+                        if mulitipart_file.file_size_is_valid {
+                            let file_document_insert = FileDocumentInsertRow {
+                                file_name : mulitipart_file.file_name.clone(),
+                                path: initial_path.to_str().unwrap().to_string(),
+                                options: FileDocumentOptions {
+                                    is_public: is_public
+                                }
+                            };
+                            let insert_file_insert_result: InsertOneResult = db.collection::<FileDocumentInsertRow>(DbCollection::FILE.to_string().as_str()).insert_one(file_document_insert, None).await.unwrap();
+    
+                            let new_file_name = insert_file_insert_result.inserted_id.as_object_id().unwrap().to_string();
+                            let new_file_directory:PathBuf = initial_path.join(format!("{}/", new_file_name));
+                            let create_file_directory_result = if !(std::fs::metadata(&new_file_directory).is_ok() && std::fs::metadata(&new_file_directory).expect("").is_dir()){
+                                match std::fs::create_dir_all(&new_file_directory) {
+                                    Ok(_)=>{
+                                        Ok(())
+                                        
+                                    }
+                                    Err(_)=> {
+                                        Err(format!("Cannot create this path: {:#?}",new_file_directory.to_str().unwrap()))
                                     
+                                    }
                                 }
-                                Err(_)=> {
-                                    Err(format!("Cannot create this path: {:#?}",new_file_directory.to_str().unwrap()))
-                                
-                                }
-                            }
-                        }else{ //path is ok and is dir
-                            Ok(())
-                        };
-                        match create_file_directory_result {
-                            Ok(_)=>{
-                                
-                                let file_extention = mulitipart_file.file_name.split(".").last().unwrap();
-                                let new_file_path: String = new_file_directory.clone().join(format!("{}.{}",new_file_name,file_extention)).to_str().unwrap().to_string();
-                                
-                                let res = save_file_to_directory(mulitipart_file.file_name, new_file_name, new_file_path, mulitipart_file.bytes).await;
-                                insert_into_file_directory_result.push((true, Ok(res._id.clone())));
-                                file_saved.push(res);
-                                
-                            },
-                            Err(_)=>{
-                                insert_into_file_directory_result.push(
-                                    (
-                                        false,
-                                        Err(
-                                            format!("Cannot create this path: {:#?}",new_file_directory.to_str().unwrap()
+                            }else{ //path is ok and is dir
+                                Ok(())
+                            };
+                            match create_file_directory_result {
+                                Ok(_)=>{
+                                    
+                                    let file_extention = mulitipart_file.file_name.split(".").last().unwrap();
+                                    let new_file_path: String = new_file_directory.clone().join(format!("{}.{}",new_file_name,file_extention)).to_str().unwrap().to_string();
+                                    
+                                    let res = save_file_to_directory(mulitipart_file.file_name, new_file_name, new_file_path, mulitipart_file.bytes).await;
+                                    insert_into_file_directory_result.push((true, Ok(res._id.clone())));
+                                    file_saved.push(res);
+                                    
+                                },
+                                Err(_)=>{
+                                    insert_into_file_directory_result.push(
+                                        (
+                                            false,
+                                            Err(
+                                                format!("Cannot create this path: {:#?}",new_file_directory.to_str().unwrap()
+                                                )
                                             )
                                         )
-                                    )
-                                );                                
+                                    );                                
+                                }
                             }
+                        }else{
+                            insert_into_file_directory_result.push(
+                                (
+                                    false,
+                                    Err("File size limit exceeded".to_string())
+                                    
+                                )
+                            );       
                         }
+                        
                     }
 
                 }
                 Err(err_string)=>{
-                    return (StatusCode::BAD_REQUEST).into_response()
+                    return (StatusCode::BAD_REQUEST, err_string).into_response()
                 }
             }
             
