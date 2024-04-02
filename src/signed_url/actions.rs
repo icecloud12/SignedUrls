@@ -1,10 +1,10 @@
-use axum::extract:: Multipart;
+use axum::{body::Bytes, extract::{multipart,  Multipart}};
 use mongodb::{bson::{doc, oid::ObjectId}, results::InsertOneResult, Database};
 use serde_json::from_str;
 use sha3::{Digest, Sha3_256};
 use rand::{self, Rng};
 use std::{
-    fs, num::ParseIntError, path::PathBuf, str::FromStr, time::{
+    f32::consts::E, fs, num::ParseIntError, path::PathBuf, str::FromStr, time::{
         SystemTime, UNIX_EPOCH
     }
 };
@@ -17,13 +17,17 @@ use crate::file::model::FileDocumentOptions;
 pub enum ActionTypes {
     UPLOAD,
     VIEW,
+    DIRECT_UPLOAD,
+    DIRECT_VIEW
 }
 
 impl ToString for ActionTypes{
     fn to_string(&self)->String{
         match &self {
             &Self::UPLOAD => "upload".to_string(),
-            &Self::VIEW => "view".to_string()
+            &Self::VIEW => "view".to_string(),
+            &Self::DIRECT_UPLOAD => "direct_upload".to_string(),
+            &Self::DIRECT_VIEW => "direct_view".to_string()
         }
     }
 }
@@ -161,7 +165,7 @@ pub async fn save_files_to_directory(
     let mut created_files: Vec<super::models::File> = vec![];
     while let Some(part) = multipart.next_field().await.unwrap(){
         if(part.name().unwrap_or_else(|| "")) == "files" {
-            println!("part: {:#?}",part);
+            
             match part.file_name(){
                 Some(file_name) => {
                     //file_name.to_string()
@@ -184,13 +188,9 @@ pub async fn save_files_to_directory(
                                 //do something on dir creation
                                 let file_extention = original_file_name.split(".").last().unwrap();
                                 let new_file_path: String = new_file_directory.clone().join(format!("{}.{}",new_file_name,file_extention)).to_str().unwrap().to_string();
-                                let mut file:File = File::create(new_file_path.clone()).await.unwrap();
-                                file.write(&file_bytes).await.unwrap();
-                                created_files.push( super::models::File{
-                                    _id: new_file_name,
-                                    file_name:original_file_name,
-                                    path: new_file_path.split("./data").last().unwrap().to_string()
-                                })
+                                
+                                let saved_file = save_file_to_directory(original_file_name, new_file_name, new_file_path, file_bytes).await;
+                                created_files.push( saved_file);
                             },
                             Err(_) => {
                                 println!("cannot create in this directory");
@@ -215,3 +215,61 @@ pub async fn save_files_to_directory(
     })
 }
 
+pub async fn save_file_to_directory(original_file_name:String, new_file_name:String, new_file_path:String, file_bytes:Bytes)-> super::models::File{
+    let mut file:File = File::create(new_file_path.clone()).await.unwrap();
+    file.write(&file_bytes).await.unwrap();
+    return super::models::File{
+        _id: new_file_name,
+        file_name:original_file_name,
+        path: new_file_path.split("./data").last().unwrap().to_string()
+    }
+}
+pub struct multipartFile {
+    pub file_name: String,
+    pub bytes: Bytes
+}
+pub async fn direct_upload_extract_multipart(mut multipart:Multipart)-> Result<(Vec<multipartFile>, String, bool, bool), String> {
+    let mut multipart_files:Vec<multipartFile> = Vec::new();
+    let mut target: String = String::new();
+    let mut is_public:bool = false; //default
+    let mut is_consumable:bool = false;//default
+    
+    let mut atleast_one_file: bool = false;
+    let mut target_is_set:bool = false;
+
+    while let Some(part)  =  multipart.next_field().await.unwrap(){
+        
+        let name = part.name();
+        
+        match part.name() {
+            Some(part_name)=>{
+                if part_name == "files" {
+                    multipart_files.push(multipartFile {
+                        file_name:  part.file_name().unwrap().to_string(),
+                        bytes: part.bytes().await.unwrap()
+                    });
+                    atleast_one_file = true;
+                } else if part_name == "target"{
+                    target = std::str::from_utf8(part.bytes().await.unwrap().into_iter().collect::<Vec<u8>>().as_ref()).unwrap().to_string();
+                    target_is_set = true;
+                } else if part_name == "is_public" {
+                    is_public = std::str::from_utf8(part.bytes().await.unwrap().into_iter().collect::<Vec<u8>>().as_ref()).unwrap() == "true".to_string();
+
+                } else if part_name == "is_consumable" {
+                    is_consumable = std::str::from_utf8(part.bytes().await.unwrap().into_iter().collect::<Vec<u8>>().as_ref()).unwrap() == "true".to_string()
+                }
+            },
+            None =>{
+            }
+
+        }
+    }
+    if atleast_one_file && target_is_set {
+        return Ok((multipart_files, target, is_public,is_consumable ))
+    }else{
+        if atleast_one_file {
+            return Err("no files sent".to_string())
+        }
+        return Err("target is not set".to_string())
+    }
+}

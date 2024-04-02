@@ -70,3 +70,12 @@ pub struct ViewRequest {
     pub files:Vec<String>,
     pub options: Option<CreateSignaturePostRequestOptions>
 }
+
+#[derive(Deserialize, Serialize)]
+pub struct DirectUploadRequest{
+    pub project_id: String,
+    pub date_created: u64,
+    pub permission: String,
+    pub target: String,
+    pub options: Option<CreateSignaturePostRequestOptions>
+}
