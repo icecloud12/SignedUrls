@@ -111,29 +111,35 @@ pub async fn get_project_id_by_api_key(api_key:String) -> Option<String>{
     return x;
 
 }
-pub async fn validate_api_key(header:HeaderMap)->Option<ProjectDocument>
+pub async fn validate_api_key(api_key: String)->Option<ProjectDocument>
 {
-    match header.get("API_KEY") {
-        Some(api_key_header) => {
-            let api_key:String = api_key_header.to_str().unwrap().to_string();
-            let db:&Database = DATABASE.get().unwrap();
-            let project_result:Result<Option<ProjectDocument>, mongodb::error::Error> = db.collection::<ProjectDocument>(DbCollection::PROJECT.to_string().as_str()).find_one( doc!{
-                "api_key": api_key
-            }, None).await;
+    println!("api key sent:{}", api_key);
+    let db:&Database = DATABASE.get().unwrap();
+    let project_result:Result<Option<ProjectDocument>, mongodb::error::Error> = db.collection::<ProjectDocument>(DbCollection::PROJECT.to_string().as_str()).find_one( doc!{
+        "api_key": api_key
+    }, None).await;
 
-            match project_result {
-                Ok(project_option)=>{
-                    match project_option {
-                        Some(project) =>{
-                            Some(project)
-                        },
-                        None=> None
-                    }
+    match project_result {
+        Ok(project_option)=>{
+            match project_option {
+                Some(project) =>{
+                    println!("project_found");
+                    Some(project)
                 },
-                //can't do anything about mongodb internal error
-                Err(_)=> None
+                None=> {
+                    println!("project not found");
+                    None
+                }
+                    
             }
+        },
+        //can't do anything about mongodb internal error
+        Err(err)=> {
+            println!("{}",err);
+            None
         }
-        None=> None
     }
+        
+       
+
 }

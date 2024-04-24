@@ -119,7 +119,8 @@ pub async fn validate_signed_url(
                                     "options" : {
                                         //you actually need to restructure it damn, TAKE NOTE OF UPDATING a SUBOBJECT
                                         "is_consumbable": options.is_consumable,
-                                        "is_consumed": true
+                                        "is_consumed": true,
+                                        "is_public": options.is_public
                                     }
                                 }
                             };

@@ -15,6 +15,7 @@ pub struct CreateSignedUrlPostRequest {
     pub target: Option<String>, //target destination appended to the project-name as the path dir to upload,
     pub is_consumable: Option<bool>,//defaults false
     pub is_public: Option<bool>, //when uploaded file becomes a public file where anybody can see
+    pub api_key: Option<String>
 }
 
 
@@ -51,7 +52,8 @@ pub struct RequestDocument {
 #[derive(Deserialize,Serialize, Debug)]
 pub struct RequestDocumentOptions {
     pub is_consumable: bool,
-    pub is_consumed: bool
+    pub is_consumed: bool,
+    pub is_public: bool
 }
 
 //accepts a duration in seconds and a vector of file_ids
@@ -59,6 +61,7 @@ pub struct RequestDocumentOptions {
 pub struct CreateSignedUrlViewRequest{
     pub duration: Option<u64>,
     pub file_id_collection:Option<Vec<String>>,
+    pub api_key: Option<String>
 }
 
 #[derive(Deserialize, Serialize)]

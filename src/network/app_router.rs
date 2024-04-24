@@ -30,7 +30,7 @@ pub async fn router()->axum::Router {
         //public preview
         .route(format!("{}/preview/:file_id",prefix).as_str(), get(process_public_read_access))
         //upload view _KEY
-        .route(format!("{}/direct/upload",prefix).as_str(), post(direct_upload))
+        //.route(format!("{}/direct/upload",prefix).as_str(), post(direct_upload))
       
         //no body limit
         .layer(DefaultBodyLimit::disable());
