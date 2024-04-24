@@ -1,6 +1,6 @@
 
 
-use std::str::FromStr;
+use std::{env, str::FromStr};
 
 use hyper::{HeaderMap, StatusCode};
 use serde_json::json;
@@ -58,7 +58,8 @@ pub async fn create_upload_request(headers:HeaderMap ,Json(post_request):Json<Cr
             };
             let db: &Database = DATABASE.get().unwrap();
             let insert_request_id = &db.collection::<UploadRequest>(DbCollection::REQUEST.to_string().as_str()).insert_one(doc, None).await.unwrap().inserted_id.as_object_id().unwrap().to_string();
-            let generated_url:String = format!("{}:{}/id/{}/permission/{}/created/{}/expiration/{}/nonce/{}/signature/{}",address, port, insert_request_id, permission,created_hashed_signature.date_created,created_hashed_signature.expiration_date,created_hashed_signature.nonce,created_hashed_signature.hashed_signature_base_64);
+            let prefix = env::var("PREFIX").unwrap();
+            let generated_url:String = format!("https://{}:{}/{}/id/{}/permission/{}/created/{}/expiration/{}/nonce/{}/signature/{}",address, port, prefix, insert_request_id, permission,created_hashed_signature.date_created,created_hashed_signature.expiration_date,created_hashed_signature.nonce,created_hashed_signature.hashed_signature_base_64);
             return (StatusCode::CREATED, Json(json!(
                 {"data":{
                     "request_id": insert_request_id,
@@ -137,7 +138,8 @@ pub async fn create_view_request(headers:HeaderMap, Json(post_request): Json<Cre
 
             let db:&Database = DATABASE.get().unwrap();
             let insert_request_id = &db.collection::<ViewRequest>(DbCollection::REQUEST.to_string().as_str()).insert_one(doc, None).await.unwrap().inserted_id.as_object_id().unwrap().to_string();
-            let generated_url:String = format!("{}:{}/id/{}/permission/{}/created/{}/expiration/{}/nonce/{}/signature/{}/file/",address, port, insert_request_id, permission,created_hashed_signature.date_created,created_hashed_signature.expiration_date,created_hashed_signature.nonce,created_hashed_signature.hashed_signature_base_64);
+            let prefix = env::var("PREFIX").unwrap();
+            let generated_url:String = format!("{}:{}/{}/id/{}/permission/{}/created/{}/expiration/{}/nonce/{}/signature/{}/file/",address, port, prefix, insert_request_id, permission,created_hashed_signature.date_created,created_hashed_signature.expiration_date,created_hashed_signature.nonce,created_hashed_signature.hashed_signature_base_64);
             return (StatusCode::CREATED, Json(json!(
                 {"data":{
                     "request_id": insert_request_id,
