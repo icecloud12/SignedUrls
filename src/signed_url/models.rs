@@ -13,3 +13,8 @@ pub struct SaveFilesToDirectoryResult {
     pub path:String, //current path
     pub files: Vec<File>
 }
+
+#[derive(Deserialize, Serialize, Debug)]
+pub struct DeleteFileUsingApiKey {
+    pub api_key: Option<String>
+}

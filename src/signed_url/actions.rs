@@ -9,7 +9,7 @@ use std::{
     }
 };
 use super::models::SaveFilesToDirectoryResult;
-use crate::{ file::{self, model::FileDocumentInsertRow}, network::{db_connection::DATABASE, DbCollection}, project:: models::ProjectDocument, request::model::UploadRequest};
+use crate::{ file::{self, model::FileDocumentInsertRow}, network::{db_connection::DATABASE, DbCollection}, project:: models::ProjectDocument, request::model::UploadRequestDocument};
 
 use tokio::{fs::File, io::AsyncWriteExt};
 use crate::request::model::RequestDocument;
@@ -146,6 +146,7 @@ pub async fn validate_signed_url(
     return false;
 }
 
+
 pub async fn save_files_to_directory(
     request_id:String,
     mut multipart:Multipart,
@@ -155,12 +156,12 @@ pub async fn save_files_to_directory(
     //get the project name and target path by files.request_id
 
     let db: &Database = DATABASE.get().unwrap();
-    let request_entry = db.collection::<UploadRequest>(DbCollection::REQUEST.to_string().as_str()).find_one(doc!{"_id": ObjectId::from_str(request_id.as_str()).unwrap()}, None).await.unwrap().unwrap();
+    let request_entry = db.collection::<UploadRequestDocument>(DbCollection::REQUEST.to_string().as_str()).find_one(doc!{"_id": ObjectId::from_str(request_id.as_str()).unwrap()}, None).await.unwrap().unwrap();
 
     let project_id = request_entry.project_id;
     let project_doc = db.collection::<ProjectDocument>(DbCollection::PROJECT.to_string().as_str()).find_one(doc!{"_id": ObjectId::from_str(project_id.as_str()).unwrap()}, None).await.unwrap().unwrap();
     let project_id = project_doc._id.to_hex();
-    let initial_path: std::path::PathBuf = std::path::PathBuf::from("./data/").join(format!("{}/",project_id)).join(format!("{}/",request_entry.target));
+    let initial_path: std::path::PathBuf = std::path::PathBuf::from("./data/").join(format!("{}/",project_id.clone())).join(format!("{}/",request_entry.target));
 
     
     let mut created_files: Vec<super::models::File> = vec![];
@@ -178,7 +179,9 @@ pub async fn save_files_to_directory(
                         path: initial_path.to_str().unwrap().to_string(),
                         options: FileDocumentOptions{
                             is_public: is_public
-                        }
+                        },
+                        project_id: ObjectId::from_str(project_id.as_str()).unwrap(),
+                        request_id: request_entry._id,
                     };
                     let insert_file_insert_result: InsertOneResult = db.collection::<FileDocumentInsertRow>(DbCollection::FILE.to_string().as_str()).insert_one(file_document_insert, None).await.unwrap();
                     let new_file_name = insert_file_insert_result.inserted_id.as_object_id().unwrap().to_string();
