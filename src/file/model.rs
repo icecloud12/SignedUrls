@@ -11,6 +11,8 @@ pub struct FileDocument{
     pub _id: ObjectId,
     pub file_name: String,
     pub path: String,
+    pub project_id: ObjectId,
+    pub request_id:ObjectId,
     pub options: FileDocumentOptions,
 }
 
@@ -18,5 +20,8 @@ pub struct FileDocument{
 pub struct FileDocumentInsertRow {
     pub file_name: String,
     pub path: String,
+    pub project_id: ObjectId,
+    pub request_id:ObjectId,
     pub options: FileDocumentOptions,
+
 }
