@@ -28,6 +28,19 @@ pub struct GenericRequest{
     pub options:Option<CreateSignaturePostRequestOptions>,
     pub permission: String
 }
+
+#[derive(Deserialize, Serialize)]
+pub struct UploadRequestDocument {
+    pub _id: ObjectId,
+    pub project_id: String,
+    pub date_created: u64,
+    pub expiration_date: u64,
+    pub options:CreateSignaturePostRequestOptions,
+    pub permission: String,
+    pub target: String
+}
+
+
 #[derive(Deserialize, Serialize)]
 pub struct UploadRequest {
     pub project_id: String,
