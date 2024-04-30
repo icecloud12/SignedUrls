@@ -1,7 +1,7 @@
 use std::env;
 
-use axum::{extract::DefaultBodyLimit, routing::{get, post}, Router};
-use crate::project::handlers::create_project;
+use axum::{extract::DefaultBodyLimit, routing::{delete, get, post}, Router};
+use crate::{project::handlers::create_project, signed_url::handlers::delete_file_using_api_key};
 use crate::request::handlers::{
     create_upload_request, 
     create_view_request,
@@ -31,7 +31,7 @@ pub async fn router()->axum::Router {
         .route(format!("{}/preview/:file_id",prefix).as_str(), get(process_public_read_access))
         //upload view _KEY
         //.route(format!("{}/direct/upload",prefix).as_str(), post(direct_upload))
-      
+        .route(format!("{}/delete/:file_id", prefix).as_str(), delete(delete_file_using_api_key))
         //no body limit
         .layer(DefaultBodyLimit::disable());
     return router;
