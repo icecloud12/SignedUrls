@@ -1,4 +1,4 @@
-use std::{alloc::System, f64::consts::E, path::PathBuf, str::FromStr, time::{SystemTime, UNIX_EPOCH}};
+use std::{path::PathBuf, str::FromStr, time::{SystemTime, UNIX_EPOCH}};
 
 use mongodb::{bson::{doc, oid::ObjectId}, results::InsertOneResult, Database};
 
@@ -8,14 +8,14 @@ use axum::{
     }, response::{ IntoResponse, Response}
 };
 use tokio_util::io::ReaderStream;
-use crate::{file::model::{FileDocumentInsertRow, FileDocumentOptions}, network::DbCollection, request::model::{CreateSignaturePostRequestOptions, DirectUploadRequest}, signed_url::actions::save_file_to_directory};
+use crate::{file::model::{FileDocumentInsertRow, FileDocumentOptions}, network::DbCollection, project::{self, models::ProjectDocument}, request::model::{CreateSignaturePostRequestOptions, DirectUploadRequest}, signed_url::actions::save_file_to_directory};
 
 use crate::{file::{self, model::FileDocument}, network::{db_connection::DATABASE}, project::actions::validate_api_key, request::model::{ViewRequest}, signed_url::actions::{save_files_to_directory, validate_signed_url}};
 use hyper::{HeaderMap, StatusCode};
 use serde_json::json;
-use tokio::fs::{self, File};
+use tokio::fs::{self, remove_file, remove_dir};
 
-use super::actions::{direct_upload_extract_multipart, multipartFile, ActionTypes};
+use super::{actions::{direct_upload_extract_multipart, multipartFile, ActionTypes}, models::DeleteFileUsingApiKey};
 
 pub async fn process_signed_url_upload_request(
     Path(params):Path<Vec<(String,String)>>,
@@ -191,4 +191,74 @@ pub async fn direct_upload(headermap:HeaderMap, multipart: Multipart) -> impl In
     //     }
     // };
     // return response;
+}
+
+
+pub async fn delete_file_using_api_key(
+    Path(params):Path<Vec<(String,String)>>,
+    Json(payload): Json<DeleteFileUsingApiKey>
+) -> impl IntoResponse {
+    let db = DATABASE.get().unwrap();
+    if let Some(file_id) = params.get(0){
+        match ObjectId::from_str(file_id.1.clone().as_str()) {
+            Ok(file_objId)=>{
+                if (payload.api_key.is_some()){
+                    match validate_api_key(payload.api_key.unwrap()).await {
+                        Some(project_doc)=>{
+                            let project_id = project_doc._id;
+                            
+                            let check_file_correct_project = db.collection::<FileDocument>(DbCollection::FILE.to_string().as_str()).find_one(doc!{
+                                "_id" : file_objId,
+                                "project_id": project_id,
+                            }, None).await.unwrap();
+
+                            match check_file_correct_project {
+                                Some(file_doc)=>{
+                                    //delete db row
+                                    let _ = db.collection::<FileDocument>(DbCollection::FILE.to_string().as_str()).find_one_and_delete(doc!{
+                                        "_id": file_doc._id
+                                    }, None).await;
+                                    let file_ext = file_doc.file_name.split(".").last().unwrap();
+                                    let file_id: String = file_doc._id.to_hex();
+                                    let file_path = format!("{file_path}/{file_name}", file_path = file_doc.path, file_name = format!("{}/{}.{}",&file_id,&file_id,file_ext ));
+                                    println!("FILEPATH: {}", file_path);
+                                    //delete file
+                                    let file_remove_result = remove_file(file_path).await;
+                                    match file_remove_result{
+                                        Ok(())=>{
+                                            println!("File removed successfully");
+                                            //file takes a while to process deletion (OS speicific) so cannot delete folder immediately on OK
+                                            // match remove_dir(file_doc.path).await {
+                                            //     Ok(())=>{
+                                            //         println!("File Directory removed successfully");
+                                            //     },
+                                            //     Err(err)=>{println!("{}",format!("Cannot remove directory :{:#?}",err))}
+                                            // }
+                                        }
+                                        Err(err)=>{println!("{}",format!("Cannot remove file :{:#?}",err))}
+                                    }
+                                
+                                    return (StatusCode::OK, "Successfully removed file").into_response()
+                                },
+                                None=>{
+                                    return (StatusCode::BAD_REQUEST, "Parameter mismatch".to_string()).into_response()
+                                }
+                            }
+                            //return (StatusCode::OK).into_response()
+                        },
+                        None=>{
+                            return (StatusCode::BAD_REQUEST, "API key invalid").into_response();
+                        }
+                    }
+                    
+                }else{
+                    return (StatusCode::UNAUTHORIZED, "An unauthorized action".to_string()).into_response()
+                }
+            },
+            Err(err)=>{
+                return (StatusCode::BAD_REQUEST, "Invalid reference for FileId".to_string()).into_response()
+            }
+        }
+    }
+    return (StatusCode::BAD_REQUEST, "Invalid reference for FileId".to_string()).into_response()
 }
