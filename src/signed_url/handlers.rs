@@ -234,31 +234,38 @@ pub async fn delete_file_using_api_key(
                                             //     },
                                             //     Err(err)=>{println!("{}",format!("Cannot remove directory :{:#?}",err))}
                                             // }
+                                            return (StatusCode::OK, Json(json!({"message": "Successfully removed file"}))).into_response()
                                         }
-                                        Err(err)=>{println!("{}",format!("Cannot remove file :{:#?}",err))}
+                                        Err(err)=>{
+                                            println!("{}",format!("Cannot remove file :{:#?}",&err));
+                                            return (StatusCode::BAD_REQUEST, Json(json!({"message": format!("Cannot remove file :{:#?}",&err)}))).into_response();
+                                        }
                                     }
                                 
-                                    return (StatusCode::OK, "Successfully removed file").into_response()
                                 },
                                 None=>{
-                                    return (StatusCode::BAD_REQUEST, "Parameter mismatch".to_string()).into_response()
+                                    return (StatusCode::BAD_REQUEST, Json(json!({"message":"Parameter mismatch"}))).into_response()
                                 }
                             }
-                            //return (StatusCode::OK).into_response()
+                            
                         },
                         None=>{
-                            return (StatusCode::BAD_REQUEST, "API key invalid").into_response();
+                            
+                            return (StatusCode::BAD_REQUEST, Json(json!({"message":"API key invalid"}))).into_response();
                         }
                     }
                     
                 }else{
-                    return (StatusCode::UNAUTHORIZED, "An unauthorized action".to_string()).into_response()
+                   
+                    return (StatusCode::UNAUTHORIZED, Json(json!({"message":"An unauthorized action"}))).into_response()
                 }
             },
             Err(err)=>{
-                return (StatusCode::BAD_REQUEST, "Invalid reference for FileId".to_string()).into_response()
+                
+                return (StatusCode::BAD_REQUEST,Json(json!({"message":"An unauthorized action"}))).into_response()
             }
         }
     }
-    return (StatusCode::BAD_REQUEST, "Invalid reference for FileId".to_string()).into_response()
+    
+    return (StatusCode::BAD_REQUEST,Json(json!({"message":"Invalid reference for FileId"})) ).into_response()
 }
