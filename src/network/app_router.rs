@@ -32,8 +32,8 @@ pub async fn router()->axum::Router {
         //upload view _KEY
         //.route(format!("{}/direct/upload",prefix).as_str(), post(direct_upload))
         .route(format!("{}/delete/:file_id", prefix).as_str(), delete(delete_file_using_api_key))
-        //no body limit
-        .layer(DefaultBodyLimit::disable());
+		//no body limit
+		.layer(DefaultBodyLimit::disable());
     return router;
 
 }

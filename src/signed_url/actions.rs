@@ -165,14 +165,19 @@ pub async fn save_files_to_directory(
 
     
     let mut created_files: Vec<super::models::File> = vec![];
-    while let Some(part) = multipart.next_field().await.unwrap(){
+    while let Some(mut part) = multipart.next_field().await.unwrap(){
+		println!("{:#?}", part);
         if(part.name().unwrap_or_else(|| "")) == "files" {
             
             match part.file_name(){
                 Some(file_name) => {
+					let mut chunks: Vec<Bytes> = Vec::new();
                     //file_name.to_string()
                     let original_file_name = file_name.to_string();
-                    let file_bytes = part.bytes().await.unwrap();
+                    // let file_bytes = part.bytes().await.unwrap();
+					while let Some(streamed_chunk) = &part.chunk().await.unwrap() {
+						chunks.push(streamed_chunk.to_owned());
+					}
                     let is_public = request_entry.options.is_public.unwrap_or_else(|| false);
                     let file_document_insert: FileDocumentInsertRow = FileDocumentInsertRow {
                         file_name : original_file_name.clone(),
@@ -193,7 +198,7 @@ pub async fn save_files_to_directory(
                                 let file_extention = original_file_name.split(".").last().unwrap();
                                 let new_file_path: String = new_file_directory.clone().join(format!("{}.{}",new_file_name,file_extention)).to_str().unwrap().to_string();
                                 
-                                let saved_file = save_file_to_directory(original_file_name, new_file_name, new_file_path, file_bytes).await;
+                                let saved_file = save_file_to_directory(original_file_name, new_file_name, new_file_path, chunks).await;
                                 created_files.push( saved_file);
                             },
                             Err(_) => {
@@ -219,9 +224,13 @@ pub async fn save_files_to_directory(
     })
 }
 
-pub async fn save_file_to_directory(original_file_name:String, new_file_name:String, new_file_path:String, file_bytes:Bytes)-> super::models::File{
+pub async fn save_file_to_directory(original_file_name:String, new_file_name:String, new_file_path:String, file_chunks:Vec<Bytes>)-> super::models::File{
     let mut file:File = File::create(new_file_path.clone()).await.unwrap();
-    file.write(&file_bytes).await.unwrap();
+	let mut _i = file_chunks.iter();
+	while let Some(file_chunk) = _i.next(){
+		file.write_all(&file_chunk).await;
+	}
+    
     return super::models::File{
         _id: new_file_name,
         file_name:original_file_name,
