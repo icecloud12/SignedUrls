@@ -94,7 +94,7 @@ pub async fn delete_file_using_api_key(
     if let Some(file_id) = params.get(0){
         match ObjectId::from_str(file_id.1.clone().as_str()) {
             Ok(file_objId)=>{
-                if (payload.api_key.is_some()){
+                if payload.api_key.is_some(){
                     match validate_api_key(payload.api_key.unwrap()).await {
                         Some(project_doc)=>{
                             let project_id = project_doc._id;
