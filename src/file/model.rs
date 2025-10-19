@@ -25,3 +25,9 @@ pub struct FileDocumentInsertRow {
     pub options: FileDocumentOptions,
 
 }
+
+#[derive(Serialize)]
+pub struct FileIdUrlPair {
+    pub id: String,
+    pub url: String,
+}

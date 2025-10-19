@@ -16,18 +16,16 @@ use crate::request::model::RequestDocument;
 use crate::file::model::FileDocumentOptions;
 pub enum ActionTypes {
     UPLOAD,
-    VIEW,
-    DIRECT_UPLOAD,
-    DIRECT_VIEW
+    VIEW_V1,
+    VIEW_V2
 }
 
 impl ToString for ActionTypes{
     fn to_string(&self)->String{
         match &self {
             &Self::UPLOAD => "upload".to_string(),
-            &Self::VIEW => "view".to_string(),
-            &Self::DIRECT_UPLOAD => "direct_upload".to_string(),
-            &Self::DIRECT_VIEW => "direct_view".to_string()
+            &Self::VIEW_V1 => "view_v1".to_string(),
+            &Self::VIEW_V2 => "view_v2".to_string()
         }
     }
 }
@@ -132,7 +130,7 @@ pub async fn validate_signed_url(
                             ).await.unwrap();
                         }
                         return true;
-                    }else if entry.permission == ActionTypes::VIEW.to_string(){
+                    }else if entry.permission == ActionTypes::VIEW_V1.to_string(){
                         return true;
                     }
                     return false;

@@ -1,10 +1,10 @@
 use std::env;
 
 use axum::{extract::DefaultBodyLimit, routing::{delete, get, post}, Router};
-use crate::{project::handlers::create_project, signed_url::handlers::delete_file_using_api_key};
+use crate::{project::handlers::create_project, request::handlers::create_view_request_v2, signed_url::handlers::delete_file_using_api_key};
 use crate::request::handlers::{
     create_upload_request, 
-    create_view_request,
+    create_view_request_v1,
     process_public_read_access
 
 };
@@ -19,13 +19,13 @@ pub async fn router()->axum::Router {
     let router = Router::new()
         //create the API_Key
         .route(format!("{}/project/create",prefix).as_str(), post(create_project))//Legal Alias
-        .route(format!("{}/v1/project/create",prefix).as_str(), post(create_project))
-        .route(format!("{}/v2/project/create", prefix).as_str(), post(create_project))//Formalization
+        .route(format!("{}/v1/service",prefix).as_str(), post(create_project))
+        .route(format!("{}/v2/service", prefix).as_str(), post(create_project))//Formalization
 
         //CREATE view requests
-        .route(format!("{}/request/create/view",prefix).as_str(), post(create_view_request))//Legal Alias
-        .route(format!("{}/v1/request/create/view",prefix).as_str(), post(create_view_request))
-        .route(format!("{}/v2/request/create/view",prefix).as_str(), post(create_view_request))//Formalization
+        .route(format!("{}/request/create/view",prefix).as_str(), post(create_view_request_v1))//Legal Alias
+        .route(format!("{}/v1/request/view",prefix).as_str(), post(create_view_request_v1))
+        .route(format!("{}/v2/request/view",prefix).as_str(), post(create_view_request_v2))//Formalization
         
         //CREATE upload requests
         .route(format!("{}/request/create/upload",prefix).as_str(), post(create_upload_request))//Legal Alias
