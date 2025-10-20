@@ -22,7 +22,7 @@ pub struct CreateSignedUrlPostRequest {
 
 #[derive(Deserialize, Serialize)]
 pub struct GenericRequest{
-    pub project_id: String,
+    pub project_id: ObjectId,
     pub date_created: u64,
     pub expiration_date: u64,
     pub options:Option<CreateSignaturePostRequestOptions>,
@@ -32,7 +32,7 @@ pub struct GenericRequest{
 #[derive(Deserialize, Serialize)]
 pub struct UploadRequestDocument {
     pub _id: ObjectId,
-    pub project_id: String,
+    pub project_id: ObjectId,
     pub date_created: u64,
     pub expiration_date: u64,
     pub options:CreateSignaturePostRequestOptions,
@@ -43,7 +43,7 @@ pub struct UploadRequestDocument {
 
 #[derive(Deserialize, Serialize)]
 pub struct UploadRequest {
-    pub project_id: String,
+    pub project_id: ObjectId,
     pub date_created: u64,
     pub expiration_date: u64,
     pub options:CreateSignaturePostRequestOptions,
@@ -55,7 +55,7 @@ pub struct UploadRequest {
 #[derive(Deserialize, Debug, Serialize)]
 pub struct RequestDocument {
     pub _id:ObjectId,
-    pub project_id: String,
+    pub project_id: ObjectId,
     pub date_created: u64,
     pub expiration_date: u64,
     pub options:Option<RequestDocumentOptions>,
@@ -79,19 +79,18 @@ pub struct CreateSignedUrlViewRequest{
 
 #[derive(Deserialize, Serialize)]
 pub struct ViewRequest {
-    pub project_id: String,
+    pub project_id: ObjectId,
     pub date_created: u64,
     pub expiration_date: u64,
     pub permission: String,
     pub files:Vec<String>,
     pub options: Option<CreateSignaturePostRequestOptions>
 }
-
-#[derive(Deserialize, Serialize)]
-pub struct DirectUploadRequest{
-    pub project_id: String,
-    pub date_created: u64,
-    pub permission: String,
-    pub target: String,
-    pub options: Option<CreateSignaturePostRequestOptions>
+#[derive(Deserialize)]
+pub struct ViewRequestQueryParamsV2 {
+    pub request: Option<String>,
+    pub created: Option<u64>,
+    pub expiration: Option<u64>,
+    pub nonce: Option<u64>,
+    pub signature: Option<String>
 }
