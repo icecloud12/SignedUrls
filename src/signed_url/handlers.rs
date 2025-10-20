@@ -1,123 +1,189 @@
-use std::{path::PathBuf, str::FromStr, time::{SystemTime, UNIX_EPOCH}};
+use std::{path::PathBuf, str::FromStr};
 
-use mongodb::{bson::{doc, oid::ObjectId}, results::InsertOneResult, Database};
+use mongodb::{
+    bson::{doc, oid::ObjectId}, Database
+};
 
 use axum::{
-    body::{Body, Bytes}, extract::{
-        Json, Multipart, Path
-    }, response::{ IntoResponse, Response}
+    body::Body,
+    extract::{Json, Multipart, Path, Query},
+    response::IntoResponse,
 };
 use tokio_util::io::ReaderStream;
-use crate::{file::model::{FileDocumentInsertRow, FileDocumentOptions}, network::DbCollection, project::{self, models::ProjectDocument}, request::model::{CreateSignaturePostRequestOptions, DirectUploadRequest}, signed_url::actions::save_file_to_directory};
 
-use crate::{file::{self, model::FileDocument}, network::{db_connection::DATABASE}, project::actions::validate_api_key, request::model::{ViewRequest}, signed_url::actions::{save_files_to_directory, validate_signed_url}};
-use hyper::{HeaderMap, StatusCode};
+use crate::{
+    file::model::FileDocument,
+    network::{db_connection::DATABASE, DbCollection},
+    project::actions::validate_api_key,
+    request::model::{ViewRequest, ViewRequestQueryParamsV2},
+    signed_url::actions::{save_files_to_directory, validate_signed_url, validate_signed_url_v2, ActionTypes},
+};
+use hyper::StatusCode;
 use serde_json::json;
-use tokio::fs::{self, remove_file, remove_dir};
+use tokio::fs::remove_file;
 
-use super::{actions::{direct_upload_extract_multipart, multipartFile, ActionTypes}, models::DeleteFileUsingApiKey};
+use super::{
+    models::DeleteFileUsingApiKey,
+};
 
 pub async fn process_signed_url_upload_request(
-    Path(params):Path<Vec<(String,String)>>,
+    Path(params): Path<Vec<(String, String)>>,
     multipart: Multipart,
-)-> impl IntoResponse{
+) -> impl IntoResponse {
     //validate the url
-    let collected_params = params.iter().map(|param| param.1.clone()).collect::<Vec<String>>();
+    let collected_params = params
+        .iter()
+        .map(|param| param.1.clone())
+        .collect::<Vec<String>>();
     let request_id: String = collected_params[0].clone();
 
-    if validate_signed_url(collected_params, "upload").await{
-        let save_files_to_directory_result  = save_files_to_directory(request_id,multipart).await;
+    if validate_signed_url(collected_params, "upload").await {
+        let save_files_to_directory_result = save_files_to_directory(request_id, multipart).await;
         match save_files_to_directory_result {
             Ok(res) => {
-                return (StatusCode::OK,Json(json!({"data":res})));
-            },
-            Err(_)=>{
-                return (StatusCode::BAD_REQUEST,Json(json!({"data":"Request could not be completed"})));
+                return (StatusCode::OK, Json(json!({"data":res})));
+            }
+            Err(_) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({"data":"Request could not be completed"})),
+                );
             }
         }
-        
     }
-    return (StatusCode::BAD_REQUEST, Json(json!({"data":"Request Expired"})))   
+    return (
+        StatusCode::BAD_REQUEST,
+        Json(json!({"data":"Request Expired"})),
+    );
 }
 pub async fn process_signed_url_view_request(
-    Path(params): Path<Vec<(String,String)>>
+    Path(params): Path<Vec<(String, String)>>,
 ) -> impl IntoResponse {
-    let collected_params: Vec<String> = params.iter().map(|param| param.1.clone()).collect::<Vec<String>>();
+    let collected_params: Vec<String> = params
+        .iter()
+        .map(|param| param.1.clone())
+        .collect::<Vec<String>>();
     let request_id: ObjectId = ObjectId::from_str(collected_params[0].as_str()).unwrap();
     let file_id = collected_params[5].clone();
     //[request_id, created, expiration, nonce, signature, file] -- tho only signature is used in valdiating signed URL
     if validate_signed_url(collected_params, "view").await {
         //if validated check if request view document has file
-        let db:&Database = DATABASE.get().unwrap();
-        let view_request_document_result = db.collection::<ViewRequest>(DbCollection::REQUEST.to_string().as_str()).find_one(doc!{ "_id": request_id}, None).await.unwrap().unwrap(); // we shouldn't technically touch the database directly so we can simply assume thigns would work out
-        if view_request_document_result.files.contains(&file_id){
+        let db: &Database = DATABASE.get().unwrap();
+        let view_request_document_result = db
+            .collection::<ViewRequest>(DbCollection::REQUEST.to_string().as_str())
+            .find_one(doc! { "_id": request_id}, None)
+            .await
+            .unwrap()
+            .unwrap(); // we shouldn't technically touch the database directly so we can simply assume thigns would work out
+        if view_request_document_result.files.contains(&file_id) {
             println!("files in correct relative to request");
             //file_id is in the list. check if it is a valid file_id referenec
-            let file_document_result = 
-            db.collection::<FileDocument>(DbCollection::FILE.to_string().as_str()).find_one(doc!{"_id" : ObjectId::from_str(file_id.as_str()).unwrap()}, None).await.unwrap();
+            let file_document_result = db
+                .collection::<FileDocument>(DbCollection::FILE.to_string().as_str())
+                .find_one(
+                    doc! {"_id" : ObjectId::from_str(file_id.as_str()).unwrap()},
+                    None,
+                )
+                .await
+                .unwrap();
 
-            match  file_document_result{
-                Some(file_document)=>{
-                    
-                    let file_extention:String = file_document.file_name.split(".").last().unwrap().to_string();
-                    let file_id:String = file_document._id.to_hex();
-                    let file_name = format!("{}.{}",&file_id,&file_extention);
-                    let file_path = PathBuf::from(file_document.path).join(format!("{}/{}",file_id,file_name));
-                    
+            match file_document_result {
+                Some(file_document) => {
+                    let file_extention: String = file_document
+                        .file_name
+                        .split(".")
+                        .last()
+                        .unwrap()
+                        .to_string();
+                    let file_id: String = file_document._id.to_hex();
+                    let file_name = format!("{}.{}", &file_id, &file_extention);
+                    let file_path = PathBuf::from(file_document.path)
+                        .join(format!("{}/{}", file_id, file_name));
+
                     match tokio::fs::File::open(file_path).await {
                         Ok(file) => {
-                            
                             let stream = ReaderStream::new(file);
                             let body = Body::from_stream(stream);
-                            return (StatusCode::OK, body).into_response()
-                        },
-                        Err(_) => return (StatusCode::NOT_FOUND).into_response()
+                            return (StatusCode::OK, body).into_response();
+                        }
+                        Err(_) => return (StatusCode::NOT_FOUND).into_response(),
                     }
-                },
-                None => return (StatusCode::NOT_FOUND, "File not found").into_response()
+                }
+                None => return (StatusCode::NOT_FOUND, "File not found").into_response(),
             }
-        }else{
-            return (StatusCode::UNAUTHORIZED, "Unauthorized file acces").into_response()
+        } else {
+            return (StatusCode::UNAUTHORIZED, "Unauthorized file acces").into_response();
         };
-    }
-    else{
-        return (StatusCode::BAD_REQUEST).into_response()
+    } else {
+        return (StatusCode::BAD_REQUEST).into_response();
     }
 }
-
+// pub async fn process_signed_url_upload_request_v2(
+//     Path(params): Path<Vec<(String, String)>>,
+//     query: Query<ViewRequestQueryParamsV2>,
+// ) {
+//     if params.len() == 1 {
+//         let file_id = params.get(0).unwrap();
+//         let permission = ActionTypes::
+//         match validate_signed_url_v2(file_id, params, permission);
+//     } else {
+//         //return a bad request
+//         // return (StatusCode::BAD_REQUEST).into_response();
+//     }
+// }
 
 pub async fn delete_file_using_api_key(
-    Path(params):Path<Vec<(String,String)>>,
-    Json(payload): Json<DeleteFileUsingApiKey>
+    Path(params): Path<Vec<(String, String)>>,
+    Json(payload): Json<DeleteFileUsingApiKey>,
 ) -> impl IntoResponse {
     let db = DATABASE.get().unwrap();
-    if let Some(file_id) = params.get(0){
+    if let Some(file_id) = params.get(0) {
         match ObjectId::from_str(file_id.1.clone().as_str()) {
-            Ok(file_objId)=>{
-                if payload.api_key.is_some(){
+            Ok(file_obj_id) => {
+                if payload.api_key.is_some() {
                     match validate_api_key(payload.api_key.unwrap()).await {
-                        Some(project_doc)=>{
+                        Some(project_doc) => {
                             let project_id = project_doc._id;
-                            
-                            let check_file_correct_project = db.collection::<FileDocument>(DbCollection::FILE.to_string().as_str()).find_one(doc!{
-                                "_id" : file_objId,
-                                "project_id": project_id,
-                            }, None).await.unwrap();
+
+                            let check_file_correct_project = db
+                                .collection::<FileDocument>(DbCollection::FILE.to_string().as_str())
+                                .find_one(
+                                    doc! {
+                                        "_id" : file_obj_id,
+                                        "project_id": project_id,
+                                    },
+                                    None,
+                                )
+                                .await
+                                .unwrap();
 
                             match check_file_correct_project {
-                                Some(file_doc)=>{
+                                Some(file_doc) => {
                                     //delete db row
-                                    let _ = db.collection::<FileDocument>(DbCollection::FILE.to_string().as_str()).find_one_and_delete(doc!{
-                                        "_id": file_doc._id
-                                    }, None).await;
+                                    let _ = db
+                                        .collection::<FileDocument>(
+                                            DbCollection::FILE.to_string().as_str(),
+                                        )
+                                        .find_one_and_delete(
+                                            doc! {
+                                                "_id": file_doc._id
+                                            },
+                                            None,
+                                        )
+                                        .await;
                                     let file_ext = file_doc.file_name.split(".").last().unwrap();
                                     let file_id: String = file_doc._id.to_hex();
-                                    let file_path = format!("{file_path}/{file_name}", file_path = file_doc.path, file_name = format!("{}/{}.{}",&file_id,&file_id,file_ext ));
+                                    let file_path = format!(
+                                        "{file_path}/{file_name}",
+                                        file_path = file_doc.path,
+                                        file_name =
+                                            format!("{}/{}.{}", &file_id, &file_id, file_ext)
+                                    );
                                     println!("FILEPATH: {}", file_path);
                                     //delete file
                                     let file_remove_result = remove_file(file_path).await;
-                                    match file_remove_result{
-                                        Ok(())=>{
+                                    match file_remove_result {
+                                        Ok(()) => {
                                             println!("File removed successfully");
                                             //file takes a while to process deletion (OS speicific) so cannot delete folder immediately on OK
                                             // match remove_dir(file_doc.path).await {
@@ -126,38 +192,61 @@ pub async fn delete_file_using_api_key(
                                             //     },
                                             //     Err(err)=>{println!("{}",format!("Cannot remove directory :{:#?}",err))}
                                             // }
-                                            return (StatusCode::OK, Json(json!({"message": "Successfully removed file"}))).into_response()
+                                            return (
+                                                StatusCode::OK,
+                                                Json(
+                                                    json!({"message": "Successfully removed file"}),
+                                                ),
+                                            )
+                                                .into_response();
                                         }
-                                        Err(err)=>{
-                                            println!("{}",format!("Cannot remove file :{:#?}",&err));
+                                        Err(err) => {
+                                            println!(
+                                                "{}",
+                                                format!("Cannot remove file :{:#?}", &err)
+                                            );
                                             return (StatusCode::BAD_REQUEST, Json(json!({"message": format!("Cannot remove file :{:#?}",&err)}))).into_response();
                                         }
                                     }
-                                
-                                },
-                                None=>{
-                                    return (StatusCode::BAD_REQUEST, Json(json!({"message":"Parameter mismatch"}))).into_response()
+                                }
+                                None => {
+                                    return (
+                                        StatusCode::BAD_REQUEST,
+                                        Json(json!({"message":"Parameter mismatch"})),
+                                    )
+                                        .into_response()
                                 }
                             }
-                            
-                        },
-                        None=>{
-                            
-                            return (StatusCode::BAD_REQUEST, Json(json!({"message":"API key invalid"}))).into_response();
+                        }
+                        None => {
+                            return (
+                                StatusCode::BAD_REQUEST,
+                                Json(json!({"message":"API key invalid"})),
+                            )
+                                .into_response();
                         }
                     }
-                    
-                }else{
-                   
-                    return (StatusCode::UNAUTHORIZED, Json(json!({"message":"An unauthorized action"}))).into_response()
+                } else {
+                    return (
+                        StatusCode::UNAUTHORIZED,
+                        Json(json!({"message":"An unauthorized action"})),
+                    )
+                        .into_response();
                 }
-            },
-            Err(err)=>{
-                
-                return (StatusCode::BAD_REQUEST,Json(json!({"message":"An unauthorized action"}))).into_response()
+            }
+            Err(err) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({"message":"An unauthorized action"})),
+                )
+                    .into_response()
             }
         }
     }
-    
-    return (StatusCode::BAD_REQUEST,Json(json!({"message":"Invalid reference for FileId"})) ).into_response()
+
+    return (
+        StatusCode::BAD_REQUEST,
+        Json(json!({"message":"Invalid reference for FileId"})),
+    )
+        .into_response();
 }
