@@ -1,4 +1,3 @@
-use std::ops::Deref;
 use std::{env, str::FromStr};
 
 use super::actions::file_reference_is_valid;
@@ -20,7 +19,7 @@ use axum::{
     extract::{Json, Path},
     response::IntoResponse,
 };
-use hyper::{HeaderMap, StatusCode};
+use hyper::StatusCode;
 use mongodb::{bson::oid::ObjectId, Database};
 use serde_json::json;
 use tokio_util::io::ReaderStream;
@@ -39,11 +38,9 @@ pub async fn create_upload_request(
         match validate_api_key(api_key.unwrap()).await {
             Some(project_doc) => {
                 let permission = ActionTypes::UPLOAD.to_string();
-                let project_id = project_doc._id.to_hex();
-                let address = std::env::var("ADDRESS").unwrap();
-                let port = std::env::var("PORT").unwrap();
+                let project_id = project_doc._id;
                 let created_hashed_signature: CreateHashedSignatureResult = create_hashed_signature(
-                    &project_id.clone(),
+                    &project_id.to_hex(),
                     &duration.unwrap_or_else(|| {
                         std::env::var("DEFAULT_DURATION_AS_SECONDS")
                             .unwrap()
@@ -174,7 +171,7 @@ async fn create_view_request(
                     CreateViewRequestVersion::V2 => ActionTypes::VIEW_V2.to_string()
                 };
 
-                let project_id = project_doc._id.to_hex();
+                let project_id = project_doc._id;
                 let mut doc: ViewRequest;
                 let mut signatures = Vec::new();
 
@@ -183,7 +180,7 @@ async fn create_view_request(
                     CreateViewRequestVersion::V1 => {
                         let created_hashed_signature: CreateHashedSignatureResult =
                             create_hashed_signature(
-                                &project_id.clone(),
+                                &project_id.to_hex(),
                                 &duration.unwrap_or_else(|| {
                                     std::env::var("DEFAULT_DURATION_AS_SECONDS")
                                         .unwrap()
@@ -201,7 +198,7 @@ async fn create_view_request(
                             .for_each(|_| {
                                 let created_hashed_signature: CreateHashedSignatureResult =
                                     create_hashed_signature(
-                                        &project_id.clone(),
+                                        &project_id.to_hex(),
                                         &duration.unwrap_or_else(|| {
                                             std::env::var("DEFAULT_DURATION_AS_SECONDS")
                                                 .unwrap()
@@ -269,7 +266,7 @@ async fn create_view_request(
 
                             file_url_pairs.push(FileIdUrlPair {
                                 id: file_id_collection.get(index).unwrap().to_string(),
-                                url:  format!("https://{origin}{prefix}/file/{file_id}?created={date_created}&expiration={expiration}&nonce={nonce}&signature={signature}",
+                                url:  format!("https://{origin}{prefix}/v2/file/{file_id}?request={insert_request_id}&created={date_created}&expiration={expiration}&nonce={nonce}&signature={signature}",
                                     origin = replaced_url ,
                                     file_id= file_id_collection.get(index).unwrap(),
                                     date_created = signature.date_created,
