@@ -32,16 +32,19 @@ pub async fn router()->axum::Router {
         .route(format!("{}/v1/request/create/upload",prefix).as_str(), post(create_upload_request))
         .route(format!("{}/v2/request/create/upload",prefix).as_str(), post(create_upload_request))//Formalization
 
-        //signed-url upload
+        //signed-url-view consumer
+        .route(format!("{}/id/:request_id/permission/view/created/:created/expiration/:expiration/nonce/:nonce/signature/:signature/file/:file_id",prefix).as_str(),
+            get(process_signed_url_view_request))//Legal Alias
+        .route(format!("{}/v1/id/:request_id/permission/view/created/:created/expiration/:expiration/nonce/:nonce/signature/:signature/file/:file_id",prefix).as_str(),
+            get(process_signed_url_view_request))
+        .route(format!("{}/v2/file/:file_id",prefix).as_str(),
+            get(process_signed_url_view_request))//Formalization
+        
+        //signed-url upload consumer
         .route(format!("{}/id/:request_id/permission/upload/created/:created/expiration/:expiration/nonce/:nonce/signature/:signature",prefix).as_str(), post(process_signed_url_upload_request))//Legal Alias
         .route(format!("{}/v1/id/:request_id/permission/upload/created/:created/expiration/:expiration/nonce/:nonce/signature/:signature",prefix).as_str(), post(process_signed_url_upload_request))
         .route(format!("{}/v2/id/:request_id/permission/upload/created/:created/expiration/:expiration/nonce/:nonce/signature/:signature",prefix).as_str(), post(process_signed_url_upload_request))//Formalization
-
-        //signed-url-view
-        .route(format!("{}/id/:request_id/permission/view/created/:created/expiration/:expiration/nonce/:nonce/signature/:signature/file/:file_id",prefix).as_str(),  get(process_signed_url_view_request))//Legal Alias
-        .route(format!("{}/v1/id/:request_id/permission/view/created/:created/expiration/:expiration/nonce/:nonce/signature/:signature/file/:file_id",prefix).as_str(),  get(process_signed_url_view_request))
-        .route(format!("{}/v2/id/:request_id/permission/view/created/:created/expiration/:expiration/nonce/:nonce/signature/:signature/file/:file_id",prefix).as_str(),  get(process_signed_url_view_request))//Formalization
-
+        
         //public preview
         .route(format!("{}/preview/:file_id",prefix).as_str(), get(process_public_read_access))//Legal Alias
         .route(format!("{}/v1/preview/:file_id",prefix).as_str(), get(process_public_read_access))
