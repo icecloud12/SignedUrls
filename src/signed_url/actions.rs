@@ -1,6 +1,9 @@
 use super::models::SaveFilesToDirectoryResult;
 use crate::{
-    file::{self, model::{FileDocument, FileDocumentInsertRow}},
+    file::{
+        self,
+        model::{FileDocument, FileDocumentInsertRow},
+    },
     network::{db_connection::DATABASE, DbCollection},
     project::models::ProjectDocument,
     request::{
@@ -26,7 +29,6 @@ use std::{
     f32::consts::E,
     fs,
     num::ParseIntError,
-    os::windows::fs::MetadataExt,
     path::PathBuf,
     str::FromStr,
     time::{SystemTime, UNIX_EPOCH},
@@ -179,6 +181,7 @@ pub async fn validate_signed_url(params: Vec<String>, permission: &str) -> bool 
                         }
                         return true;
                     } else if entry.permission == ActionTypes::VIEW_V1.to_string() {
+                        //we we're unable to consume the request because the request(and hash) is shared between requested files
                         return true;
                     }
                     return false;
@@ -192,10 +195,10 @@ pub async fn validate_signed_url(params: Vec<String>, permission: &str) -> bool 
     return false;
 }
 pub async fn validate_signed_url_v2(
-    file_id: String,
-    params: ViewRequestQueryParamsV2,
+    file_id: &String,
+    query: ViewRequestQueryParamsV2,
     permission: String,
-) -> Result<FileDocument,(StatusCode, String)> {
+) -> Result<FileDocument, (StatusCode, String)> {
     match ObjectId::from_str(&file_id) {
         Ok(object_id) => {
             //valid objectid syntax
@@ -212,10 +215,10 @@ pub async fn validate_signed_url_v2(
                             expiration,
                             nonce,
                             signature,
-                        } = params;
+                        } = query;
                         match (request, created, expiration, nonce, signature) {
                             (
-                                Some(_request),
+                                Some(request_id),
                                 Some(created),
                                 Some(expiration),
                                 Some(nonce),
@@ -231,20 +234,60 @@ pub async fn validate_signed_url_v2(
                                     &nonce,
                                 );
                                 if replicated_hash == signature {
+                                    let db = DATABASE.get().unwrap();
+
+                                    //get request record
+                                    let request_record = db
+                                        .collection::<RequestDocument>(
+                                            DbCollection::REQUEST.to_string().as_str(),
+                                        )
+                                        .find_one(
+                                            doc! {
+                                                "_id": ObjectId::from_str(&request_id).unwrap()
+                                            },
+                                            None,
+                                        )
+                                        .await;
+                                    match request_record {
+                                        Ok(option_record) => match option_record {
+                                            Some(record) => {
+                                                if record.permission == permission {
+                                                    //TODO need a permutation table(file-reads) for request_id, file_id, consumed
+                                                }
+                                            }
+                                            None => {}
+                                        },
+                                        Err(_) => {
+                                            return Err((StatusCode::SERVICE_UNAVAILABLE, String::from("Somethign went wrong when trying to query file")));
+                                        }
+                                    }
+                                    //try and consume the request
                                     return Ok(file);
-                                }
-                                else {
-                                    return Err((StatusCode::UNAUTHORIZED, String::from("Cannot access with resource")))
+                                } else {
+                                    return Err((
+                                        StatusCode::UNAUTHORIZED,
+                                        String::from("Cannot access with resource"),
+                                    ));
                                 }
                             }
-                            _ => return Err((StatusCode::UNAUTHORIZED, String::from("Cannot access with resource"))),
+                            _ => {
+                                return Err((
+                                    StatusCode::UNAUTHORIZED,
+                                    String::from("Cannot access with resource"),
+                                ))
+                            }
                         }
                     }
                 }
                 Err(_is_valid_error) => return Err(_is_valid_error),
             }
         }
-        Err(_) => return Err((StatusCode::NOT_FOUND, String::from("Cannot find requested resource"))),
+        Err(_) => {
+            return Err((
+                StatusCode::NOT_FOUND,
+                String::from("Cannot find requested resource"),
+            ))
+        }
     }
     //check file is valid
     //check file_id is private
@@ -272,10 +315,7 @@ pub async fn save_files_to_directory(
     let project_id = request_entry.project_id;
     let project_doc = db
         .collection::<ProjectDocument>(DbCollection::PROJECT.to_string().as_str())
-        .find_one(
-            doc! {"_id": project_id},
-            None,
-        )
+        .find_one(doc! {"_id": project_id}, None)
         .await
         .unwrap()
         .unwrap();
