@@ -164,7 +164,7 @@ pub async fn validate_signed_url(params: Vec<String>, permission: &str) -> bool 
                                 "$set": {
                                     "options" : {
                                         //you actually need to restructure it damn, TAKE NOTE OF UPDATING a SUBOBJECT
-                                        "is_consumbable": options.is_consumable,
+                                        "is_consumable": options.is_consumable,
                                         "is_consumed": true,
                                         "is_public": options.is_public
                                     }
