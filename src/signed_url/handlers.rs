@@ -1,7 +1,8 @@
 use std::{path::PathBuf, str::FromStr};
 
 use mongodb::{
-    bson::{doc, oid::ObjectId}, Database
+    bson::{doc, oid::ObjectId},
+    Database,
 };
 
 use axum::{
@@ -16,15 +17,15 @@ use crate::{
     network::{db_connection::DATABASE, DbCollection},
     project::actions::validate_api_key,
     request::model::{ViewRequest, ViewRequestQueryParamsV2},
-    signed_url::actions::{save_files_to_directory, validate_signed_url, validate_signed_url_v2, ActionTypes},
+    signed_url::actions::{
+        save_files_to_directory, validate_signed_url, validate_signed_url_v2, ActionTypes,
+    },
 };
 use hyper::StatusCode;
 use serde_json::json;
 use tokio::fs::remove_file;
 
-use super::{
-    models::DeleteFileUsingApiKey,
-};
+use super::models::DeleteFileUsingApiKey;
 
 pub async fn process_signed_url_upload_request(
     Path(params): Path<Vec<(String, String)>>,
@@ -118,19 +119,22 @@ pub async fn process_signed_url_view_request(
         return (StatusCode::BAD_REQUEST).into_response();
     }
 }
-// pub async fn process_signed_url_upload_request_v2(
-//     Path(params): Path<Vec<(String, String)>>,
-//     query: Query<ViewRequestQueryParamsV2>,
-// ) {
-//     if params.len() == 1 {
-//         let file_id = params.get(0).unwrap();
-//         let permission = ActionTypes::
-//         match validate_signed_url_v2(file_id, params, permission);
-//     } else {
-//         //return a bad request
-//         // return (StatusCode::BAD_REQUEST).into_response();
-//     }
-// }
+pub async fn process_signed_url_view_request_v2(
+    Path(params): Path<Vec<(String, String)>>,
+    query: Query<ViewRequestQueryParamsV2>,
+) {
+    if params.len() == 1 {
+        let (_file_param_key, file_param_value) = params.get(0).unwrap();
+        let permission = ActionTypes::VIEW_V2.to_string();
+        match validate_signed_url_v2(file_param_value, query.0, permission).await {
+            Ok(file) => {}
+            Err((status_code, message)) => {}
+        }
+    } else {
+        //return bad request
+        // return (StatusCode::BAD_REQUEST).into_response();
+    }
+}
 
 pub async fn delete_file_using_api_key(
     Path(params): Path<Vec<(String, String)>>,
