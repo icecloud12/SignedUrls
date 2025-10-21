@@ -1,6 +1,6 @@
 use mongodb::bson::oid::ObjectId;
-use serde::{Deserialize, Serialize};
 
+use serde::{Deserialize, Serialize};
 #[derive(Deserialize,Serialize)]
 pub struct CreateSignaturePostRequestOptions{
     pub is_consumable: Option<bool>,
@@ -93,4 +93,16 @@ pub struct ViewRequestQueryParamsV2 {
     pub expiration: Option<u64>,
     pub nonce: Option<u64>,
     pub signature: Option<String>
+}
+#[derive(Serialize, Deserialize)]
+pub struct ViewFileRequestOptions {
+    pub is_consumable: bool,
+    pub is_consumed: bool,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct ViewFileRequest {
+    pub request_id: ObjectId,
+    pub file_id: ObjectId,
+    pub options: Option<ViewFileRequestOptions>,
 }
