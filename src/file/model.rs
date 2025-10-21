@@ -27,18 +27,7 @@ pub struct FileDocumentInsertRow {
 #[derive(Serialize)]
 pub struct FileIdUrlPair {
     pub id: String,
-    pub url: String,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct ViewFileRequestOptions {
-    is_consumable: bool,
-    is_consumed: bool,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct ViewFileRequest {
-    request_id: ObjectId,
-    file_id: ObjectId,
-    options: Option<ViewFileRequestOptions>,
+    pub url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
 }
