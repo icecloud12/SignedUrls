@@ -74,7 +74,8 @@ pub struct RequestDocumentOptions {
 pub struct CreateSignedUrlViewRequest{
     pub duration: Option<u64>,
     pub file_id_collection:Option<Vec<String>>,
-    pub api_key: Option<String>
+    pub api_key: Option<String>,
+    pub is_consumable: Option<bool>
 }
 
 #[derive(Deserialize, Serialize)]

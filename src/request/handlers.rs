@@ -12,6 +12,7 @@ use super::model::{
 use crate::file::model::FileIdUrlPair;
 use crate::network::db_connection::DATABASE;
 use crate::project::actions::validate_api_key;
+use crate::request::model::{ViewFileRequest, ViewFileRequestOptions};
 use crate::signed_url::actions::{create_hashed_signature, CreateHashedSignatureResult};
 use crate::{network::DbCollection, signed_url::actions::ActionTypes};
 use axum::{
@@ -29,7 +30,7 @@ pub async fn create_upload_request(
 ) -> impl IntoResponse {
     let CreateSignedUrlPostRequest {
         duration,
-        is_consumable: _,
+        is_consumable:_,
         target,
         is_public,
         api_key,
@@ -161,6 +162,7 @@ async fn create_view_request(
         duration,
         file_id_collection,
         api_key,
+        is_consumable
     } = post_request;
     match api_key {
         Some(api_key) => match validate_api_key(api_key).await {
@@ -215,6 +217,7 @@ async fn create_view_request(
                     }
                 };
                 let t_sig = signatures.get(0).unwrap();
+                let db: &Database = DATABASE.get().unwrap();
                 doc = ViewRequest {
                     project_id: project_id,
                     date_created: t_sig.date_created,
@@ -224,7 +227,6 @@ async fn create_view_request(
                     options: None,
                 };
 
-                let db: &Database = DATABASE.get().unwrap();
                 let insert_request_id = &db
                     .collection::<ViewRequest>(DbCollection::REQUEST.to_string().as_str())
                     .insert_one(doc, None)
@@ -232,8 +234,7 @@ async fn create_view_request(
                     .unwrap()
                     .inserted_id
                     .as_object_id()
-                    .unwrap()
-                    .to_string();
+                    .unwrap();
                 let prefix = env::var("PREFIX").unwrap();
                 let replaced_url = env::var("REPLACED_URL").unwrap();
 
