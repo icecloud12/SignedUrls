@@ -261,20 +261,50 @@ async fn create_view_request(
                     }
                     CreateViewRequestVersion::V2 => {
                         let mut file_url_pairs: Vec<FileIdUrlPair> = Vec::new();
-                        
+                        let mut view_file_requests: Vec<ViewFileRequest> = Vec::new();
                         signatures.iter().enumerate().for_each(|(index, signature)| {
+                            let file_id = file_id_collection.get(index).unwrap();
+                            let file_object_id = ObjectId::from_str(&file_id);
+                            match file_object_id {
+                                Ok(file_object_id)=>{
+                                    file_url_pairs.push(FileIdUrlPair {
+                                        id: file_id_collection.get(index).unwrap().to_string(),
+                                        url:  Some(format!("https://{origin}{prefix}/v2/file/{file_id}?request={insert_request_id}&created={date_created}&expiration={expiration}&nonce={nonce}&signature={signature}",
+                                            origin = replaced_url ,
+                                            file_id= file_id,
+                                            date_created = signature.date_created,
+                                            expiration = signature.expiration_date,
+                                            nonce = signature.nonce,
+                                            signature = signature.hashed_signature_base_64).to_string()),
+                                        error: None
+                                    });
+                                    
+                                    view_file_requests.push(ViewFileRequest {
+                                        request_id: *insert_request_id,
+                                        file_id: file_object_id,
+                                        options: Some(ViewFileRequestOptions{
+                                            is_consumable: {
+                                                match is_consumable{
+                                                    Some(option_val) => {option_val},
+                                                    None => false
+                                                }
+                                            },
+                                            is_consumed: false
+                                        })
+                                    });
+                                }
+                                Err(_)=>{
 
-                            file_url_pairs.push(FileIdUrlPair {
-                                id: file_id_collection.get(index).unwrap().to_string(),
-                                url:  format!("https://{origin}{prefix}/v2/file/{file_id}?request={insert_request_id}&created={date_created}&expiration={expiration}&nonce={nonce}&signature={signature}",
-                                    origin = replaced_url ,
-                                    file_id= file_id_collection.get(index).unwrap(),
-                                    date_created = signature.date_created,
-                                    expiration = signature.expiration_date,
-                                    nonce = signature.nonce,
-                                    signature = signature.hashed_signature_base_64).to_string()
-                            });
+                                    file_url_pairs.push(FileIdUrlPair {
+                                        id: file_id_collection.get(index).unwrap().to_string(),
+                                        url: None,
+                                        error: Some(String::from("Invalid file reference format"))
+                                    });
+                                }
+                            }
+
                         });
+                        let _ = db.collection::<ViewFileRequest>(DbCollection::VIEW_FILE_REQUEST.to_string().as_str()).insert_many(view_file_requests, None).await;
                         return (
                             StatusCode::CREATED,
                             Json(json!({
