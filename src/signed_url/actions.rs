@@ -1,25 +1,17 @@
 use super::models::SaveFilesToDirectoryResult;
 use crate::{
-    file::{
-        self,
-        model::{FileDocument, FileDocumentInsertRow},
-    },
+    file::model::FileDocumentInsertRow,
     network::{db_connection::DATABASE, DbCollection},
     project::models::ProjectDocument,
     request::{
         actions::file_reference_is_valid,
         model::{
-            UploadRequestDocument, ViewFileRequest, ViewFileRequestOptions,
-            ViewRequestQueryParamsV2,
+            UploadRequestDocument, ViewFileRequest, ViewFileRequestDocument,
+            ViewFileRequestOptions, ViewRequestQueryParamsV2,
         },
     },
 };
-use axum::{
-    body::Bytes,
-    extract::{multipart, Multipart},
-    Error,
-};
-use hyper::StatusCode;
+use axum::{body::Bytes, extract::Multipart};
 use mongodb::{
     bson::{doc, oid::ObjectId},
     results::InsertOneResult,
@@ -27,10 +19,8 @@ use mongodb::{
 };
 use rand::{self, Rng};
 use serde_json::from_str;
-use sha3::{Digest, Sha3_256};
+use sha2::{Digest, Sha256};
 use std::{
-    f32::consts::E,
-    fs,
     num::ParseIntError,
     path::PathBuf,
     str::FromStr,
@@ -39,7 +29,10 @@ use std::{
 
 use crate::file::model::FileDocumentOptions;
 use crate::request::model::RequestDocument;
-use tokio::{fs::File, io::AsyncWriteExt};
+use tokio::{
+    fs::{self, File},
+    io::AsyncWriteExt,
+};
 pub enum ActionTypes {
     UPLOAD,
     VIEW_V1,
@@ -66,6 +59,7 @@ pub fn create_hashed_signature(
     project_id: &String,
     duration: &u64,
     action_type: &String,
+    file_id: Option<&String>,
 ) -> CreateHashedSignatureResult {
     let date_created: u64 = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -80,6 +74,7 @@ pub fn create_hashed_signature(
         &expiration_date,
         &action_type,
         &nonce,
+        file_id,
     );
 
     return CreateHashedSignatureResult {
@@ -95,21 +90,19 @@ pub fn hash_parameters(
     expiration_date: &u64,
     action_type: &String,
     nonce: &u64,
+    file_id: Option<&String>,
 ) -> String {
-    let sk = std::env::var("SECRET_KEY").unwrap().to_string();
-    let mut hasher = Sha3_256::new();
-    println!(
-        "{:#?}|{:#?}|{:#?}|{:#?}|{:#?}|{:#?}",
-        project_id, date_created, expiration_date, action_type, nonce, sk
-    );
+    let mut hasher = Sha256::new();
     hasher.update(&project_id.as_bytes());
     hasher.update((&date_created).to_be_bytes());
     hasher.update((&expiration_date).to_be_bytes());
     hasher.update(&action_type.as_bytes());
     hasher.update(&nonce.to_be_bytes());
+    if file_id.is_some() {
+        hasher.update(file_id.unwrap().as_bytes());
+    }
     let signature = hasher.finalize();
     let hashed_signature_base_64 = signature
-        .as_slice()
         .iter()
         .map(|b| format!("{:02x}", b))
         .collect::<String>();
@@ -156,6 +149,7 @@ pub async fn validate_signed_url(params: Vec<String>, permission: &str) -> bool 
                     &from_str::<u64>(&expiration).unwrap(),
                     &permission.to_string(),
                     &from_str::<u64>(&nonce).unwrap(),
+                    None,
                 );
                 if replicated_hash == signature {
                     if entry.permission == ActionTypes::UPLOAD.to_string() {
@@ -227,39 +221,45 @@ pub async fn validate_signed_url_v2(
                                 Some(nonce),
                                 Some(signature),
                             ) => {
-                                //get action type of request
-                                let project_id = file.project_id.to_hex();
-                                let replicated_hash = hash_parameters(
-                                    &project_id,
-                                    &created,
-                                    &expiration,
-                                    &permission,
-                                    &nonce,
-                                );
-                                if replicated_hash == signature {
-                                    let db = DATABASE.get().unwrap();
+                                let current_time: u64 = SystemTime::now()
+                                    .duration_since(UNIX_EPOCH)
+                                    .unwrap()
+                                    .as_secs();
+                                if (current_time >= created && current_time <= expiration) {
+                                    let project_id = file.project_id.to_hex();
+                                    let replicated_hash = hash_parameters(
+                                        &project_id,
+                                        &created,
+                                        &expiration,
+                                        &permission,
+                                        &nonce,
+                                        Some(&file_id),
+                                    );
+                                    if replicated_hash == signature {
+                                        let db = DATABASE.get().unwrap();
 
-                                    //get request record
-                                    let request_object_id =
-                                        ObjectId::from_str(&request_id).unwrap();
-                                    let request_record = db
-                                        .collection::<RequestDocument>(
-                                            DbCollection::REQUEST.to_string().as_str(),
-                                        )
-                                        .find_one(
-                                            doc! {
-                                                "_id": request_object_id
-                                            },
-                                            None,
-                                        )
-                                        .await;
-                                    match request_record {
-                                        Ok(option_record) => match option_record {
-                                            Some(record) => {
-                                                if record.permission == permission {
-                                                    //TODO need a permutation table(file-reads) for request_id, file_id, consumed
-                                                    match db
-                                                        .collection::<ViewFileRequest>(
+                                        //get request record
+                                        let request_object_id =
+                                            ObjectId::from_str(&request_id).unwrap();
+                                        let request_record = db
+                                            .collection::<RequestDocument>(
+                                                DbCollection::REQUEST.to_string().as_str(),
+                                            )
+                                            .find_one(
+                                                doc! {
+                                                    "_id": request_object_id
+                                                },
+                                                None,
+                                            )
+                                            .await;
+                                        match request_record {
+                                            Ok(option_record) => {
+                                                match option_record {
+                                                    Some(record) => {
+                                                        if record.permission == permission {
+                                                            //TODO need a permutation table(file-reads) for request_id, file_id, consumed
+                                                            match db
+                                                        .collection::<ViewFileRequestDocument>(
                                                             DbCollection::VIEW_FILE_REQUEST
                                                                 .to_string()
                                                                 .as_str(),
@@ -284,22 +284,20 @@ pub async fn validate_signed_url_v2(
                                                                         None => {
                                                                             return false;
                                                                         }
-                                                                        Some(mut options) => {
+                                                                        Some(options) => {
                                                                             let ViewFileRequestOptions{is_consumable, is_consumed } = options;
                                                                             if is_consumable {
                                                                                 if is_consumed {
                                                                                     return false;
                                                                                 } else {
-                                                                                    options.is_consumed = true;
                                                                                     //consume the request
                                                                                     let filter = doc! {"_id": view_file_request._id};
                                                                                     let update = doc! {"$set": {
-                                                                                        "options":  {
-                                                                                            is_consumable,
-                                                                                            is_consumed
+                                                                                        "options.is_consumed":  {
+                                                                                            "is_consumed": true
                                                                                         }
                                                                                     }};
-                                                                                    db.collection::<ViewFileRequest>(DbCollection::VIEW_FILE_REQUEST.to_string().as_str())
+                                                                                    let _ = db.collection::<ViewFileRequestDocument>(DbCollection::VIEW_FILE_REQUEST.to_string().as_str())
                                                                                         .update_one(filter,update,None).await;
                                                                                     return true;
                                                                                 }
@@ -316,19 +314,24 @@ pub async fn validate_signed_url_v2(
                                                             return false;
                                                         }
                                                     }
-                                                } else {
-                                                    return false;
+                                                        } else {
+                                                            return false;
+                                                        }
+                                                    }
+                                                    None => return false,
                                                 }
                                             }
-                                            None => return false,
-                                        },
-                                        Err(_) => {
-                                            return false;
+                                            Err(_) => {
+                                                return false;
+                                            }
                                         }
+                                    } else {
+                                        return false;
                                     }
                                 } else {
                                     return false;
                                 }
+                                //get action type of request
                             }
                             _ => return false,
                         }
@@ -413,8 +416,8 @@ pub async fn save_files_to_directory(
                         .to_string();
                     let new_file_directory: PathBuf =
                         initial_path.join(format!("{}/", new_file_name));
-                    if !(fs::metadata(&new_file_directory).is_ok()
-                        && fs::metadata(&new_file_directory).expect("").is_dir())
+                    if !(fs::metadata(&new_file_directory).await.is_ok()
+                        && fs::metadata(&new_file_directory).await.expect("").is_dir())
                     {
                         match std::fs::create_dir_all(&new_file_directory) {
                             Ok(_a) => {

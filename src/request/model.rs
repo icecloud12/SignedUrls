@@ -97,9 +97,17 @@ pub struct ViewFileRequestOptions {
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct ViewFileRequest {
+pub struct ViewFileRequestDocument {
     pub _id: ObjectId,
     pub request_id: ObjectId,
     pub file_id: ObjectId,
     pub options: Option<ViewFileRequestOptions>,
 }
+
+#[derive(Serialize, Deserialize)]
+pub struct ViewFileRequest {
+    pub request_id: ObjectId,
+    pub file_id: ObjectId,
+    pub options: Option<ViewFileRequestOptions>,
+}
+

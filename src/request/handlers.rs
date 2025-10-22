@@ -12,7 +12,7 @@ use super::model::{
 use crate::file::model::FileIdUrlPair;
 use crate::network::db_connection::DATABASE;
 use crate::project::actions::validate_api_key;
-use crate::request::model::{ViewFileRequest, ViewFileRequestOptions};
+use crate::request::model::{ViewFileRequest, ViewFileRequestDocument, ViewFileRequestOptions};
 use crate::signed_url::actions::{create_hashed_signature, CreateHashedSignatureResult};
 use crate::{network::DbCollection, signed_url::actions::ActionTypes};
 use axum::{
@@ -50,6 +50,7 @@ pub async fn create_upload_request(
                             .unwrap()
                     }),
                     &permission.clone(),
+                    None
                 );
                 let doc: UploadRequest = UploadRequest {
                     project_id: project_id,
@@ -191,13 +192,14 @@ async fn create_view_request(
                                         .unwrap()
                                 }),
                                 &permission.clone(),
+                                None
                             );
                         signatures.push(created_hashed_signature);
                     }
                     CreateViewRequestVersion::V2 => {
                         file_id_collection
                             .iter()
-                            .for_each(|_| {
+                            .for_each(|file_id| {
                                 let created_hashed_signature: CreateHashedSignatureResult =
                                     create_hashed_signature(
                                         &project_id.to_hex(),
@@ -209,6 +211,7 @@ async fn create_view_request(
                                                 .unwrap()
                                         }),
                                         &permission.clone(),
+                                        Some(file_id)
                                     );
                                 println!("pushing signature");
 
