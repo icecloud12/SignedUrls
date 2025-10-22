@@ -77,7 +77,6 @@ pub async fn process_signed_url_view_request(
             .unwrap()
             .unwrap(); // we shouldn't technically touch the database directly so we can simply assume thigns would work out
         if view_request_document_result.files.contains(&file_id) {
-            println!("files in correct relative to request");
             //file_id is in the list. check if it is a valid file_id referenec
             let file_document_result = db
                 .collection::<FileDocument>(DbCollection::FILE.to_string().as_str())
@@ -122,13 +121,12 @@ pub async fn process_signed_url_view_request(
 pub async fn process_signed_url_view_request_v2(
     Path(params): Path<Vec<(String, String)>>,
     query: Query<ViewRequestQueryParamsV2>,
-) {
+) -> impl IntoResponse {
     if params.len() == 1 {
         let (_file_param_key, file_param_value) = params.get(0).unwrap();
         let permission = ActionTypes::VIEW_V2.to_string();
-        match validate_signed_url_v2(file_param_value, query.0, permission).await {
-            Ok(file) => {}
-            Err((status_code, message)) => {}
+        if validate_signed_url_v2(file_param_value, query.0, permission).await {
+        } else {
         }
     } else {
         //return bad request

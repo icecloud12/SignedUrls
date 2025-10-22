@@ -8,7 +8,10 @@ use crate::{
     project::models::ProjectDocument,
     request::{
         actions::file_reference_is_valid,
-        model::{UploadRequestDocument, ViewRequestQueryParamsV2},
+        model::{
+            UploadRequestDocument, ViewFileRequest, ViewFileRequestOptions,
+            ViewRequestQueryParamsV2,
+        },
     },
 };
 use axum::{
@@ -198,15 +201,15 @@ pub async fn validate_signed_url_v2(
     file_id: &String,
     query: ViewRequestQueryParamsV2,
     permission: String,
-) -> Result<FileDocument, (StatusCode, String)> {
+) -> bool {
     match ObjectId::from_str(&file_id) {
-        Ok(object_id) => {
+        Ok(file_object_id) => {
             //valid objectid syntax
-            match file_reference_is_valid(object_id).await {
+            match file_reference_is_valid(file_object_id).await {
                 Ok(file) => {
                     //skip checking hash if file is public
                     if file.options.is_public {
-                        return Ok(file);
+                        return true;
                     } else {
                         //check param files are all Some
                         let ViewRequestQueryParamsV2 {
@@ -237,13 +240,15 @@ pub async fn validate_signed_url_v2(
                                     let db = DATABASE.get().unwrap();
 
                                     //get request record
+                                    let request_object_id =
+                                        ObjectId::from_str(&request_id).unwrap();
                                     let request_record = db
                                         .collection::<RequestDocument>(
                                             DbCollection::REQUEST.to_string().as_str(),
                                         )
                                         .find_one(
                                             doc! {
-                                                "_id": ObjectId::from_str(&request_id).unwrap()
+                                                "_id": request_object_id
                                             },
                                             None,
                                         )
@@ -253,40 +258,87 @@ pub async fn validate_signed_url_v2(
                                             Some(record) => {
                                                 if record.permission == permission {
                                                     //TODO need a permutation table(file-reads) for request_id, file_id, consumed
+                                                    match db
+                                                        .collection::<ViewFileRequest>(
+                                                            DbCollection::VIEW_FILE_REQUEST
+                                                                .to_string()
+                                                                .as_str(),
+                                                        )
+                                                        .find_one(
+                                                            doc! {
+                                                                "file_id": &file_object_id,
+                                                                "request_id": &request_object_id
+                                                            },
+                                                            None,
+                                                        )
+                                                        .await
+                                                    {
+                                                        Ok(view_file_request_document_option) => {
+                                                            match view_file_request_document_option
+                                                            {
+                                                                Some(view_file_request) => {
+                                                                    //the options per view request for version 2 should be Some
+                                                                    let request_options =
+                                                                        view_file_request.options;
+                                                                    match request_options {
+                                                                        None => {
+                                                                            return false;
+                                                                        }
+                                                                        Some(mut options) => {
+                                                                            let ViewFileRequestOptions{is_consumable, is_consumed } = options;
+                                                                            if is_consumable {
+                                                                                if is_consumed {
+                                                                                    return false;
+                                                                                } else {
+                                                                                    options.is_consumed = true;
+                                                                                    //consume the request
+                                                                                    let filter = doc! {"_id": view_file_request._id};
+                                                                                    let update = doc! {"$set": {
+                                                                                        "options":  {
+                                                                                            is_consumable,
+                                                                                            is_consumed
+                                                                                        }
+                                                                                    }};
+                                                                                    db.collection::<ViewFileRequest>(DbCollection::VIEW_FILE_REQUEST.to_string().as_str())
+                                                                                        .update_one(filter,update,None).await;
+                                                                                    return true;
+                                                                                }
+                                                                            } else {
+                                                                                return true;
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+                                                                None => return false,
+                                                            }
+                                                        }
+                                                        Err(_) => {
+                                                            return false;
+                                                        }
+                                                    }
+                                                } else {
+                                                    return false;
                                                 }
                                             }
-                                            None => {}
+                                            None => return false,
                                         },
                                         Err(_) => {
-                                            return Err((StatusCode::SERVICE_UNAVAILABLE, String::from("Somethign went wrong when trying to query file")));
+                                            return false;
                                         }
                                     }
-                                    //try and consume the request
-                                    return Ok(file);
                                 } else {
-                                    return Err((
-                                        StatusCode::UNAUTHORIZED,
-                                        String::from("Cannot access with resource"),
-                                    ));
+                                    return false;
                                 }
                             }
-                            _ => {
-                                return Err((
-                                    StatusCode::UNAUTHORIZED,
-                                    String::from("Cannot access with resource"),
-                                ))
-                            }
+                            _ => return false,
                         }
                     }
                 }
-                Err(_is_valid_error) => return Err(_is_valid_error),
+                Err(_) => return false,
             }
         }
         Err(_) => {
-            return Err((
-                StatusCode::NOT_FOUND,
-                String::from("Cannot find requested resource"),
-            ))
+            return false;
         }
     }
     //check file is valid

@@ -1,32 +1,29 @@
 use mongodb::bson::oid::ObjectId;
 
 use serde::{Deserialize, Serialize};
-#[derive(Deserialize,Serialize)]
-pub struct CreateSignaturePostRequestOptions{
+#[derive(Deserialize, Serialize)]
+pub struct CreateSignaturePostRequestOptions {
     pub is_consumable: Option<bool>,
     pub is_consumed: Option<bool>,
-    pub is_public: Option<bool>
-    
+    pub is_public: Option<bool>,
 }
 #[derive(Deserialize)]
 pub struct CreateSignedUrlPostRequest {
     //pub project_name: Option<String>, //deserialization would throw an error and panics the program (Deprecated and is moved to APIKEY headers)
-    pub duration: Option<u64>, // defaults to env DEFAULT_DURATION variable
+    pub duration: Option<u64>,  // defaults to env DEFAULT_DURATION variable
     pub target: Option<String>, //target destination appended to the project-name as the path dir to upload,
-    pub is_consumable: Option<bool>,//defaults false
+    pub is_consumable: Option<bool>, //defaults false
     pub is_public: Option<bool>, //when uploaded file becomes a public file where anybody can see
-    pub api_key: Option<String>
+    pub api_key: Option<String>,
 }
 
-
-
 #[derive(Deserialize, Serialize)]
-pub struct GenericRequest{
+pub struct GenericRequest {
     pub project_id: ObjectId,
     pub date_created: u64,
     pub expiration_date: u64,
-    pub options:Option<CreateSignaturePostRequestOptions>,
-    pub permission: String
+    pub options: Option<CreateSignaturePostRequestOptions>,
+    pub permission: String,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -35,47 +32,45 @@ pub struct UploadRequestDocument {
     pub project_id: ObjectId,
     pub date_created: u64,
     pub expiration_date: u64,
-    pub options:CreateSignaturePostRequestOptions,
+    pub options: CreateSignaturePostRequestOptions,
     pub permission: String,
-    pub target: String
+    pub target: String,
 }
-
 
 #[derive(Deserialize, Serialize)]
 pub struct UploadRequest {
     pub project_id: ObjectId,
     pub date_created: u64,
     pub expiration_date: u64,
-    pub options:CreateSignaturePostRequestOptions,
+    pub options: CreateSignaturePostRequestOptions,
     pub permission: String,
-    pub target: String
+    pub target: String,
 }
-
 
 #[derive(Deserialize, Debug, Serialize)]
 pub struct RequestDocument {
-    pub _id:ObjectId,
+    pub _id: ObjectId,
     pub project_id: ObjectId,
     pub date_created: u64,
     pub expiration_date: u64,
-    pub options:Option<RequestDocumentOptions>,
-    pub permission: String
+    pub options: Option<RequestDocumentOptions>,
+    pub permission: String,
 }
 
-#[derive(Deserialize,Serialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 pub struct RequestDocumentOptions {
     pub is_consumable: bool,
     pub is_consumed: bool,
-    pub is_public: bool
+    pub is_public: bool,
 }
 
 //accepts a duration in seconds and a vector of file_ids
 #[derive(Deserialize)]
-pub struct CreateSignedUrlViewRequest{
+pub struct CreateSignedUrlViewRequest {
     pub duration: Option<u64>,
-    pub file_id_collection:Option<Vec<String>>,
+    pub file_id_collection: Option<Vec<String>>,
     pub api_key: Option<String>,
-    pub is_consumable: Option<bool>
+    pub is_consumable: Option<bool>,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -84,8 +79,8 @@ pub struct ViewRequest {
     pub date_created: u64,
     pub expiration_date: u64,
     pub permission: String,
-    pub files:Vec<String>,
-    pub options: Option<CreateSignaturePostRequestOptions>
+    pub files: Vec<String>,
+    pub options: Option<CreateSignaturePostRequestOptions>,
 }
 #[derive(Deserialize)]
 pub struct ViewRequestQueryParamsV2 {
@@ -93,7 +88,7 @@ pub struct ViewRequestQueryParamsV2 {
     pub created: Option<u64>,
     pub expiration: Option<u64>,
     pub nonce: Option<u64>,
-    pub signature: Option<String>
+    pub signature: Option<String>,
 }
 #[derive(Serialize, Deserialize)]
 pub struct ViewFileRequestOptions {
@@ -103,6 +98,7 @@ pub struct ViewFileRequestOptions {
 
 #[derive(Serialize, Deserialize)]
 pub struct ViewFileRequest {
+    pub _id: ObjectId,
     pub request_id: ObjectId,
     pub file_id: ObjectId,
     pub options: Option<ViewFileRequestOptions>,
