@@ -6,8 +6,10 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+argon2 = "0.5.3"
 axum = { version = "0.7.4", features = ["http2", "multipart"] }
 axum-server = { version = "0.6.0", features = ["tls-rustls"] }
+base64 = "0.22.1"
 chrono = { version = "0.4.34", features = ["serde"] }
 dotenv = "0.15.0"
 hyper = { version = "1.1.0", features = ["server", "http1", "http2"] } 
