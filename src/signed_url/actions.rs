@@ -6,7 +6,7 @@ use crate::{
     request::{
         actions::file_reference_is_valid,
         model::{
-            UploadRequestDocument, ViewFileRequest, ViewFileRequestDocument,
+            UploadRequestDocument, ViewFileRequestDocument,
             ViewFileRequestOptions, ViewRequestQueryParamsV2,
         },
     },
@@ -159,11 +159,8 @@ pub async fn validate_signed_url(params: Vec<String>, permission: &str) -> bool 
                             let filter = doc! {"_id": entry._id};
                             let update = doc! {
                                 "$set": {
-                                    "options" : {
-                                        //you actually need to restructure it damn, TAKE NOTE OF UPDATING a SUBOBJECT
-                                        "is_consumable": options.is_consumable,
+                                    "options.is_consumed" : {
                                         "is_consumed": true,
-                                        "is_public": options.is_public
                                     }
                                 }
                             };
