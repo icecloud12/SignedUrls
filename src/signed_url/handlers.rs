@@ -17,10 +17,11 @@ use crate::{
     network::{db_connection::DATABASE, DbCollection},
     project::actions::validate_api_key,
     request::model::{ViewRequest, ViewRequestQueryParamsV2},
-    signed_url::actions::{
+    signed_url::{self, actions::{
         save_files_to_directory, validate_signed_url, validate_signed_url_v2, ActionTypes,
-    },
+    }},
 };
+use signed_urls::collections;
 use hyper::StatusCode;
 use serde_json::json;
 use tokio::fs::remove_file;
@@ -72,7 +73,7 @@ pub async fn process_signed_url_view_request(
         let db: &Database = DATABASE.get().unwrap();
         let view_request_document_result = db
             .collection::<ViewRequest>(DbCollection::REQUEST.to_string().as_str())
-            .find_one(doc! { "_id": request_id}, None)
+            .find_one(doc! { collections::ViewFileRequest::REQUEST_ID: request_id}, None)
             .await
             .unwrap()
             .unwrap(); // we shouldn't technically touch the database directly so we can simply assume thigns would work out
@@ -179,8 +180,8 @@ pub async fn delete_file_using_api_key(
                                 .collection::<FileDocument>(DbCollection::FILE.to_string().as_str())
                                 .find_one(
                                     doc! {
-                                        "_id" : file_obj_id,
-                                        "project_id": project_id,
+                                        collections::File::ID: file_obj_id,
+                                        collections::File::PROJECT_ID: project_id,
                                     },
                                     None,
                                 )
@@ -209,19 +210,11 @@ pub async fn delete_file_using_api_key(
                                         file_name =
                                             format!("{}/{}.{}", &file_id, &file_id, file_ext)
                                     );
-                                    println!("FILEPATH: {}", file_path);
                                     //delete file
                                     let file_remove_result = remove_file(file_path).await;
                                     match file_remove_result {
                                         Ok(()) => {
                                             println!("File removed successfully");
-                                            //file takes a while to process deletion (OS speicific) so cannot delete folder immediately on OK
-                                            // match remove_dir(file_doc.path).await {
-                                            //     Ok(())=>{
-                                            //         println!("File Directory removed successfully");
-                                            //     },
-                                            //     Err(err)=>{println!("{}",format!("Cannot remove directory :{:#?}",err))}
-                                            // }
                                             return (
                                                 StatusCode::OK,
                                                 Json(

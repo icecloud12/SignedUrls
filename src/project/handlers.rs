@@ -5,27 +5,23 @@ use axum::extract::Json;
 use serde_json::json;
 
 use super::actions;
-use crate::network::db_connection::DATABASE;
 #[derive(Deserialize)]
 pub struct CreateProjectPostRequest {
     pub name: String,
 }
-
-pub async fn create_project(Json(post_request):Json<CreateProjectPostRequest>) -> impl IntoResponse{
-    let _db: &mongodb::Database = DATABASE.get().unwrap();
-    //check if exist
-    let create_request = actions::insert_project_if_exists( &post_request.name).await;
+//
+pub async fn create_bucket(Json(post_request):Json<CreateProjectPostRequest>) -> impl IntoResponse{
+    let create_request = actions::create_bucket(post_request.name).await;
         
     match create_request {
-        Some((request_id, api_key)) => {
+        Ok(new_bucket) => {
             //then create directory
-            actions::create_project_directory(&request_id).await;
-            let j = json!({"data":{"id":request_id, "project_name": post_request.name.as_str(), "api_key": api_key }, "message":"success"});
+            actions::create_bucket_directory(&new_bucket._id).await;
 
-            return (StatusCode::CREATED, Json(j)).into_response();
+            return (StatusCode::CREATED, Json(new_bucket)).into_response();
         },
-        None => {
-            let j = json!({"data":"", "message":"Project already exists"});
+        Err(_) => {
+            let j = json!({"message":"Project already exists"});
             return (StatusCode::CONFLICT,Json(j)).into_response();
         }
     };   

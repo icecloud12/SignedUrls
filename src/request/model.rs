@@ -16,6 +16,16 @@ pub struct CreateSignedUrlPostRequest {
     pub is_public: Option<bool>, //when uploaded file becomes a public file where anybody can see
     pub api_key: Option<String>,
 }
+#[derive(Deserialize)]
+pub struct CreateSignedUrlPostRequestV2 { // same as v1 with extra fields
+    pub duration: Option<u64>,  // defaults to env DEFAULT_DURATION variable
+    pub target: Option<String>, //target destination appended to the project-name as the path dir to upload,
+    pub is_consumable: Option<bool>, //defaults false
+    pub is_public: Option<bool>, //when uploaded file becomes a public file where anybody can see
+    pub public_key: Option<String>,
+    pub secret_key: Option<String>
+}
+
 
 #[derive(Deserialize, Serialize)]
 pub struct GenericRequest {
