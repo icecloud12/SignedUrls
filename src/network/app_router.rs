@@ -37,8 +37,9 @@ pub async fn router()->axum::Router {
             get(process_signed_url_view_request))//Legal Alias
         .route(format!("{}/v1/id/:request_id/permission/view/created/:created/expiration/:expiration/nonce/:nonce/signature/:signature/file/:file_id",prefix).as_str(),
             get(process_signed_url_view_request))
+        //used to read public and protected views
         .route(format!("{}/v2/file/:file_id",prefix).as_str(),
-            get(process_signed_url_view_request_v2))//Formalization
+            get(process_signed_url_view_request_v2))
         
         //signed-url upload consumer
         .route(format!("{}/id/:request_id/permission/upload/created/:created/expiration/:expiration/nonce/:nonce/signature/:signature",prefix).as_str(), post(process_signed_url_upload_request))//Legal Alias
@@ -48,7 +49,6 @@ pub async fn router()->axum::Router {
         //public preview
         .route(format!("{}/preview/:file_id",prefix).as_str(), get(process_public_read_access))//Legal Alias
         .route(format!("{}/v1/preview/:file_id",prefix).as_str(), get(process_public_read_access))
-        .route(format!("{}/v2/preview/:file_id",prefix).as_str(), get(process_public_read_access))//Formalization
 
         .route(format!("{}/delete/:file_id", prefix).as_str(), delete(delete_file_using_api_key))//Legal Alias
         .route(format!("{}/v1/delete/:file_id", prefix).as_str(), delete(delete_file_using_api_key))
