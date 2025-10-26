@@ -6,8 +6,8 @@ use crate::{
     request::{
         actions::file_reference_is_valid,
         model::{
-            UploadRequestDocument, ViewFileRequestDocument,
-            ViewFileRequestOptions, ViewRequestQueryParamsV2,
+            UploadRequestDocument, ViewFileRequestDocument, ViewFileRequestOptions,
+            ViewRequestQueryParamsV2,
         },
     },
 };
@@ -34,17 +34,23 @@ use tokio::{
     io::AsyncWriteExt,
 };
 pub enum ActionTypes {
-    UPLOAD,
+    UPLOAD_V1,
+    UPLOAD_V2,
     VIEW_V1,
     VIEW_V2,
+    DELETE_V1,
+    DELETE_V2,
 }
 
 impl ToString for ActionTypes {
     fn to_string(&self) -> String {
         match &self {
-            &Self::UPLOAD => "upload".to_string(),
+            &Self::UPLOAD_V1 => "upload_v1".to_string(),
+            &Self::UPLOAD_V2 => "upload_v2".to_string(),
             &Self::VIEW_V1 => "view_v1".to_string(),
             &Self::VIEW_V2 => "view_v2".to_string(),
+            &Self::DELETE_V1 => "delete_v1".to_string(),
+            &Self::DELETE_V2 => "delete_v2".to_string(),
         }
     }
 }
@@ -152,7 +158,7 @@ pub async fn validate_signed_url(params: Vec<String>, permission: &str) -> bool 
                     None,
                 );
                 if replicated_hash == signature {
-                    if entry.permission == ActionTypes::UPLOAD.to_string() {
+                    if entry.permission == ActionTypes::UPLOAD_V1.to_string() {
                         let options: crate::request::model::RequestDocumentOptions =
                             entry.options.unwrap();
                         if options.is_consumable {

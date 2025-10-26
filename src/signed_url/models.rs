@@ -18,3 +18,8 @@ pub struct SaveFilesToDirectoryResult {
 pub struct DeleteFileUsingApiKey {
     pub api_key: Option<String>
 }
+#[derive(Deserialize, Serialize, Debug)]
+pub struct DeleteFileUsingApiKeyV2 {
+    pub public_key: Option<String>,
+    pub secret_key: Option<String>
+}

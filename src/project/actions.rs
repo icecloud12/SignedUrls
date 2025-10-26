@@ -1,12 +1,12 @@
 use argon2::{
-    password_hash::{self, PasswordHasher, SaltString},
-    Argon2,
+    password_hash::{self, PasswordHasher, SaltString}, Argon2, PasswordHash, PasswordVerifier
 };
+use hyper::StatusCode;
 use mongodb::{bson::doc, Database};
 use std::fs;
 
 use super::models::{ProjectDocument};
-use crate::{network::{db_connection::DATABASE, DbCollection}, project::models::{BucketDocument, CreatedBucket, InsertBucketDocument}
+use crate::{network::{db_connection::DATABASE, DbCollection}, project::models::{BucketDocument, CreatedBucket, InsertBucketDocument}, signed_url::actions::ActionTypes
 };
 use base64::{
     engine::general_purpose,
@@ -118,57 +118,13 @@ pub async fn create_bucket_directory(project_id: &String) {
     }
 }
 
-pub async fn get_project_id_by_name(project_name: String) -> Option<String> {
+pub async fn validate_api_key(public_key: String, secret_key: Option<String>, action_version:ActionTypes) -> Result<Option<BucketDocument>, StatusCode> {
     let db: &Database = DATABASE.get().unwrap();
-    let if_exist_result: Result<Option<ProjectDocument>, mongodb::error::Error> = db
-        .collection::<ProjectDocument>(DbCollection::PROJECT.to_string().as_str())
-        .find_one(doc! {"name":project_name.as_str()}, None)
-        .await;
-
-    let x: Option<String> = match if_exist_result {
-        Ok(y) => {
-            let z: Option<String> = match y {
-                Some(a) => {
-                    let id: String = a._id.to_string();
-                    Some(id)
-                }
-                None => None,
-            };
-            z
-        }
-        Err(_error) => None,
-    };
-    return x;
-}
-pub async fn get_project_id_by_api_key(api_key: String) -> Option<String> {
-    let db: &Database = DATABASE.get().unwrap();
-    let if_exist_result: Result<Option<ProjectDocument>, mongodb::error::Error> = db
-        .collection::<ProjectDocument>(DbCollection::PROJECT.to_string().as_str())
-        .find_one(doc! {"api_key":api_key.as_str()}, None)
-        .await;
-
-    let x: Option<String> = match if_exist_result {
-        Ok(y) => {
-            let z: Option<String> = match y {
-                Some(a) => {
-                    let id: String = a._id.to_string();
-                    Some(id)
-                }
-                None => None,
-            };
-            z
-        }
-        Err(_error) => None,
-    };
-    return x;
-}
-pub async fn validate_api_key(api_key: String) -> Option<ProjectDocument> {
-    let db: &Database = DATABASE.get().unwrap();
-    let project_result: Result<Option<ProjectDocument>, mongodb::error::Error> = db
-        .collection::<ProjectDocument>(DbCollection::PROJECT.to_string().as_str())
+    let project_result: Result<Option<BucketDocument>, mongodb::error::Error> = db
+        .collection::<BucketDocument>(DbCollection::BUCKET.to_string().as_str())
         .find_one(
             doc! {
-                signed_urls::collections::Bucket::PUBLIC_KEY : api_key
+                signed_urls::collections::Bucket::PUBLIC_KEY : public_key
             },
             None,
         )
@@ -177,18 +133,36 @@ pub async fn validate_api_key(api_key: String) -> Option<ProjectDocument> {
     match project_result {
         Ok(project_option) => match project_option {
             Some(project) => {
-                println!("project_found");
-                Some(project)
+                match action_version {
+                    ActionTypes::UPLOAD_V1 | ActionTypes::VIEW_V1 | ActionTypes::DELETE_V1 => {
+                        Ok(Some(project))
+                    }
+                    ActionTypes::UPLOAD_V2 | ActionTypes::VIEW_V2 | ActionTypes::DELETE_V2 => {
+                        let argon2_instance = Argon2::default();
+                        match PasswordHash::new(&project.hashed_secret_key){
+                            Ok(password_hash)=>{
+                                match argon2_instance.verify_password(secret_key.unwrap().as_bytes(), &password_hash){
+                                    Ok(_) => {
+                                       Ok(Some(project)) 
+                                    }
+                                    Err(_) => {
+                                       Err(StatusCode::UNAUTHORIZED) 
+                                    }
+                                }
+                            }
+                            Err(_) => {
+                                Err(StatusCode::INTERNAL_SERVER_ERROR)
+                            }
+                        }
+                    }
+                }
             }
             None => {
-                println!("project not found");
-                None
+                Err(StatusCode::BAD_REQUEST)
             }
         },
-        //can't do anything about mongodb internal error
-        Err(err) => {
-            println!("{}", err);
-            None
+        Err(_) => {
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
         }
     }
 }

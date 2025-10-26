@@ -2,10 +2,12 @@ use mongodb::bson::oid::ObjectId;
 
 use serde::{Deserialize, Serialize};
 #[derive(Deserialize, Serialize)]
-pub struct CreateSignaturePostRequestOptions {
+pub struct RequestOptions {
     pub is_consumable: Option<bool>,
     pub is_consumed: Option<bool>,
     pub is_public: Option<bool>,
+    pub size_limit: Option<usize>,
+    pub mime_types: Option<Vec<String>>
 }
 #[derive(Deserialize)]
 pub struct CreateSignedUrlPostRequest {
@@ -23,7 +25,9 @@ pub struct CreateSignedUrlPostRequestV2 { // same as v1 with extra fields
     pub is_consumable: Option<bool>, //defaults false
     pub is_public: Option<bool>, //when uploaded file becomes a public file where anybody can see
     pub public_key: Option<String>,
-    pub secret_key: Option<String>
+    pub secret_key: Option<String>,
+    pub size_limit: Option<usize>,
+    pub mime_types: Option<Vec<String>>
 }
 
 
@@ -32,7 +36,7 @@ pub struct GenericRequest {
     pub project_id: ObjectId,
     pub date_created: u64,
     pub expiration_date: u64,
-    pub options: Option<CreateSignaturePostRequestOptions>,
+    pub options: Option<RequestOptions>,
     pub permission: String,
 }
 
@@ -42,7 +46,7 @@ pub struct UploadRequestDocument {
     pub project_id: ObjectId,
     pub date_created: u64,
     pub expiration_date: u64,
-    pub options: CreateSignaturePostRequestOptions,
+    pub options: RequestOptions,
     pub permission: String,
     pub target: String,
 }
@@ -52,9 +56,9 @@ pub struct UploadRequest {
     pub project_id: ObjectId,
     pub date_created: u64,
     pub expiration_date: u64,
-    pub options: CreateSignaturePostRequestOptions,
+    pub options: RequestOptions,
     pub permission: String,
-    pub target: String,
+    pub target: Option<String>,
 }
 
 #[derive(Deserialize, Debug, Serialize)]
@@ -90,7 +94,7 @@ pub struct ViewRequest {
     pub expiration_date: u64,
     pub permission: String,
     pub files: Vec<String>,
-    pub options: Option<CreateSignaturePostRequestOptions>,
+    pub options: Option<RequestOptions>,
 }
 #[derive(Deserialize)]
 pub struct ViewRequestQueryParamsV2 {

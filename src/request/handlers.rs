@@ -3,16 +3,14 @@ use std::{env, str::FromStr};
 use super::actions::file_reference_is_valid;
 use super::model::{
     //post_request
-    CreateSignaturePostRequestOptions,
     CreateSignedUrlPostRequest,
     CreateSignedUrlViewRequest,
-    UploadRequest,
     ViewRequest,
 };
 use crate::file::model::FileIdUrlPair;
 use crate::network::db_connection::DATABASE;
 use crate::project::actions::validate_api_key;
-use crate::request::model::{ViewFileRequest, ViewFileRequestDocument, ViewFileRequestOptions};
+use crate::request::model::{CreateSignedUrlPostRequestV2, ViewFileRequest, ViewFileRequestOptions};
 use crate::signed_url::actions::{create_hashed_signature, CreateHashedSignatureResult};
 use crate::{network::DbCollection, signed_url::actions::ActionTypes};
 use axum::{
@@ -30,71 +28,43 @@ pub async fn create_upload_request(
 ) -> impl IntoResponse {
     let CreateSignedUrlPostRequest {
         duration,
-        is_consumable:_,
+        is_consumable,
         target,
         is_public,
         api_key,
     } = post_request;
     if api_key.is_some() {
-        match validate_api_key(api_key.unwrap()).await {
-            Some(project_doc) => {
-                let permission = ActionTypes::UPLOAD.to_string();
-                let project_id = project_doc._id;
-                let created_hashed_signature: CreateHashedSignatureResult = create_hashed_signature(
-                    &project_id.to_hex(),
-                    &duration.unwrap_or_else(|| {
-                        std::env::var("DEFAULT_DURATION_AS_SECONDS")
-                            .unwrap()
-                            .to_string()
-                            .parse::<u64>()
-                            .unwrap()
-                    }),
-                    &permission.clone(),
-                    None
-                );
-                let doc: UploadRequest = UploadRequest {
-                    project_id: project_id,
-                    date_created: created_hashed_signature.date_created.clone(),
-                    expiration_date: created_hashed_signature.expiration_date.clone(),
-                    options: CreateSignaturePostRequestOptions {
-                        is_consumable: post_request.is_consumable.clone(),
-                        is_consumed: Some(false),
-                        is_public: Some(is_public).unwrap_or_else(|| Some(false)),
-                    },
-                    permission: permission.clone(),
-                    target: target.unwrap(),
-                };
-                let db: &Database = DATABASE.get().unwrap();
-                let insert_request_id = &db
-                    .collection::<UploadRequest>(DbCollection::REQUEST.to_string().as_str())
-                    .insert_one(doc, None)
-                    .await
-                    .unwrap()
-                    .inserted_id
-                    .as_object_id()
-                    .unwrap()
-                    .to_string();
-                let prefix = env::var("PREFIX").unwrap();
-                let replaced_url = env::var("REPLACED_URL").unwrap();
-                let generated_url:String = format!("https://{}{}/id/{}/permission/{}/created/{}/expiration/{}/nonce/{}/signature/{}",replaced_url, prefix, insert_request_id, permission,created_hashed_signature.date_created,created_hashed_signature.expiration_date,created_hashed_signature.nonce,created_hashed_signature.hashed_signature_base_64);
-                return (
-                    StatusCode::CREATED,
-                    Json(json!(
-                        {"data":{
-                            "request_id": insert_request_id,
-                            "url": generated_url
-                        }
-                    })),
-                );
+        let api_key = api_key.unwrap();
+         match validate_api_key(api_key.clone(), None, ActionTypes::UPLOAD_V1).await {
+            Ok(bucket_o)=>{
+                match bucket_o{
+                    Some(bucket) => {
+                        let upload_request_v2 = CreateSignedUrlPostRequestV2{
+                            duration,
+                            is_consumable,
+                            target: target.clone(),
+                            is_public,
+                            public_key: Some(api_key),
+                            secret_key: None,
+                            size_limit: None,
+                            mime_types: None,
+                        };
+                        return crate::request::actions::create_upload_request(bucket, upload_request_v2, ActionTypes::UPLOAD_V1).await;
+                    }
+                    None => {
+                        return (
+                            StatusCode::BAD_REQUEST,
+                            Json(json!(
+                                {"data":None::<String>, "message":"Failed to create signed-url"}
+                            )),
+                        ).into_response();
+                    }    
+                }
             }
-            None => {
-                return (
-                    StatusCode::BAD_REQUEST,
-                    Json(json!(
-                        {"data":None::<String>, "message":"Failed to create signed-url"}
-                    )),
-                );
+            Err(status_code)=>{
+                return (status_code).into_response();
             }
+            
         }
     } else {
         return (
@@ -102,9 +72,25 @@ pub async fn create_upload_request(
             Json(json!(
                 {"data":None::<String>, "message":"Failed to authorize"}
             )),
-        );
+        ).into_response();
     }
 }
+
+// pub async fn create_upload_request_v2(Json(post_request): Json<CreateSignedUrlPostRequestV2>) -> impl IntoResponse{
+//     let CreateSignedUrlPostRequestV2 { duration, target, is_consumable, is_public, public_key, secret_key, size_limit, mime_types } = post_request;
+//     match (public_key, secret_key){
+//         (Some(public_key), Some(private_key))=>{
+//             match  validate_api_key(public_key, secret_key, ActionTypes::UPLOAD_V2).await{
+//                 Ok()
+//             }
+//             return (StatusCode::OK).into_response();
+//         }
+//         (_, _) => {
+//             return (StatusCode::UNAUTHORIZED).into_response();
+//         }
+//     }
+// }
+
 
 pub async fn process_public_read_access(
     Path(params): Path<Vec<(String, String)>>,
@@ -166,40 +152,23 @@ async fn create_view_request(
         is_consumable
     } = post_request;
     match api_key {
-        Some(api_key) => match validate_api_key(api_key).await {
-            Some(project_doc) => {
-                let file_id_collection = file_id_collection.unwrap();
-                let permission = match version {
-                    CreateViewRequestVersion::V1 => ActionTypes::VIEW_V1.to_string(),
-                    CreateViewRequestVersion::V2 => ActionTypes::VIEW_V2.to_string()
-                };
+        Some(api_key) => match validate_api_key(api_key, None, ActionTypes::VIEW_V1).await {
+            Ok(bucket_document)=>{
+                match bucket_document {
+                    
+                    Some(project_doc) => {
+                        let file_id_collection = file_id_collection.unwrap();
+                        let permission = match version {
+                            CreateViewRequestVersion::V1 => ActionTypes::VIEW_V1.to_string(),
+                            CreateViewRequestVersion::V2 => ActionTypes::VIEW_V2.to_string()
+                        };
 
-                let project_id = project_doc._id;
-                let mut doc: ViewRequest;
-                let mut signatures = Vec::new();
+                        let project_id = project_doc._id;
+                        let mut signatures = Vec::new();
 
                 
-                match version {
-                    CreateViewRequestVersion::V1 => {
-                        let created_hashed_signature: CreateHashedSignatureResult =
-                            create_hashed_signature(
-                                &project_id.to_hex(),
-                                &duration.unwrap_or_else(|| {
-                                    std::env::var("DEFAULT_DURATION_AS_SECONDS")
-                                        .unwrap()
-                                        .to_string()
-                                        .parse::<u64>()
-                                        .unwrap()
-                                }),
-                                &permission.clone(),
-                                None
-                            );
-                        signatures.push(created_hashed_signature);
-                    }
-                    CreateViewRequestVersion::V2 => {
-                        file_id_collection
-                            .iter()
-                            .for_each(|file_id| {
+                        match version {
+                            CreateViewRequestVersion::V1 => {
                                 let created_hashed_signature: CreateHashedSignatureResult =
                                     create_hashed_signature(
                                         &project_id.to_hex(),
@@ -211,130 +180,149 @@ async fn create_view_request(
                                                 .unwrap()
                                         }),
                                         &permission.clone(),
-                                        Some(file_id)
+                                        None
                                     );
-                                println!("pushing signature");
-
                                 signatures.push(created_hashed_signature);
-                            });
-                    }
-                };
-                let t_sig = signatures.get(0).unwrap();
-                let db: &Database = DATABASE.get().unwrap();
-                doc = ViewRequest {
-                    project_id: project_id,
-                    date_created: t_sig.date_created,
-                    expiration_date: t_sig.expiration_date,
-                    permission: permission.clone(),
-                    files: file_id_collection.clone(),
-                    options: None,
-                };
-
-                let insert_request_id = &db
-                    .collection::<ViewRequest>(DbCollection::REQUEST.to_string().as_str())
-                    .insert_one(doc, None)
-                    .await
-                    .unwrap()
-                    .inserted_id
-                    .as_object_id()
-                    .unwrap();
-                let prefix = env::var("PREFIX").unwrap();
-                let replaced_url = env::var("REPLACED_URL").unwrap();
-
-                match version {
-                    CreateViewRequestVersion::V1 => {
-                        let signature = signatures.get(0).unwrap();
-                        let generated_url:String = format!("https://{}{}/id/{}/permission/{}/created/{}/expiration/{}/nonce/{}/signature/{}/file/",
-                            replaced_url,
-                            prefix,
-                            insert_request_id,
-                            permission,
-                            signature.date_created,
-                            signature.expiration_date,
-                            signature.nonce,
-                            signature.hashed_signature_base_64);
-                        return (
-                            StatusCode::CREATED,
-                            Json(json!(
-                                {"data":{
-                                    "request_id": insert_request_id,
-                                    "base_url": generated_url
-                                }
-                            })),
-                        );
-                    }
-                    CreateViewRequestVersion::V2 => {
-                        let mut file_url_pairs: Vec<FileIdUrlPair> = Vec::new();
-                        let mut view_file_requests: Vec<ViewFileRequest> = Vec::new();
-                        signatures.iter().enumerate().for_each(|(index, signature)| {
-                            let file_id = file_id_collection.get(index).unwrap();
-                            let file_object_id = ObjectId::from_str(&file_id);
-                            match file_object_id {
-                                Ok(file_object_id)=>{
-                                    file_url_pairs.push(FileIdUrlPair {
-                                        id: file_id_collection.get(index).unwrap().to_string(),
-                                        url:  Some(format!("https://{origin}{prefix}/v2/file/{file_id}?request={insert_request_id}&created={date_created}&expiration={expiration}&nonce={nonce}&signature={signature}",
-                                            origin = replaced_url ,
-                                            file_id= file_id,
-                                            date_created = signature.date_created,
-                                            expiration = signature.expiration_date,
-                                            nonce = signature.nonce,
-                                            signature = signature.hashed_signature_base_64).to_string()),
-                                        error: None
-                                    });
-                                    
-                                    view_file_requests.push(ViewFileRequest {
-                                        request_id: *insert_request_id,
-                                        file_id: file_object_id,
-                                        options: Some(ViewFileRequestOptions{
-                                            is_consumable: {
-                                                match is_consumable{
-                                                    Some(option_val) => {option_val},
-                                                    None => false
-                                                }
-                                            },
-                                            is_consumed: false
-                                        })
-                                    });
-                                }
-                                Err(_)=>{
-
-                                    file_url_pairs.push(FileIdUrlPair {
-                                        id: file_id_collection.get(index).unwrap().to_string(),
-                                        url: None,
-                                        error: Some(String::from("Invalid file reference format"))
-                                    });
-                                }
                             }
+                            CreateViewRequestVersion::V2 => {
+                                file_id_collection
+                                    .iter()
+                                    .for_each(|file_id| {
+                                        let created_hashed_signature: CreateHashedSignatureResult =
+                                            create_hashed_signature(
+                                                &project_id.to_hex(),
+                                                &duration.unwrap_or_else(|| {
+                                                    std::env::var("DEFAULT_DURATION_AS_SECONDS")
+                                                        .unwrap()
+                                                        .to_string()
+                                                        .parse::<u64>()
+                                                        .unwrap()
+                                                }),
+                                                &permission.clone(),
+                                                Some(file_id)
+                                            );
+                                        println!("pushing signature");
 
-                        });
-                        let _ = db.collection::<ViewFileRequest>(DbCollection::VIEW_FILE_REQUEST.to_string().as_str()).insert_many(view_file_requests, None).await;
-                        return (
-                            StatusCode::CREATED,
-                            Json(json!({
-                                "request_id": insert_request_id,
-                                "files": file_url_pairs
-                            })),
-                        );
+                                        signatures.push(created_hashed_signature);
+                                    });
+                            }
+                        };
+                        let t_sig = signatures.get(0).unwrap();
+                        let db: &Database = DATABASE.get().unwrap();
+                        let doc = ViewRequest {
+                            project_id: project_id,
+                            date_created: t_sig.date_created,
+                            expiration_date: t_sig.expiration_date,
+                            permission: permission.clone(),
+                            files: file_id_collection.clone(),
+                            options: None,
+                        };
+
+                        let insert_request_id = &db
+                            .collection::<ViewRequest>(DbCollection::REQUEST.to_string().as_str())
+                            .insert_one(doc, None)
+                            .await
+                            .unwrap()
+                            .inserted_id
+                            .as_object_id()
+                            .unwrap();
+                        let prefix = env::var("PREFIX").unwrap();
+                        let replaced_url = env::var("REPLACED_URL").unwrap();
+
+                        match version {
+                            CreateViewRequestVersion::V1 => {
+                                let signature = signatures.get(0).unwrap();
+                                let generated_url:String = format!("https://{}{}/id/{}/permission/{}/created/{}/expiration/{}/nonce/{}/signature/{}/file/",
+                                    replaced_url,
+                                    prefix,
+                                    insert_request_id,
+                                    permission,
+                                    signature.date_created,
+                                    signature.expiration_date,
+                                    signature.nonce,
+                                    signature.hashed_signature_base_64);
+                                return (
+                                    StatusCode::CREATED,
+                                    Json(json!(
+                                        {"data":{
+                                            "request_id": insert_request_id,
+                                            "base_url": generated_url
+                                        }
+                                    })),
+                                ).into_response();
+                            }
+                            CreateViewRequestVersion::V2 => {
+                                let mut file_url_pairs: Vec<FileIdUrlPair> = Vec::new();
+                                let mut view_file_requests: Vec<ViewFileRequest> = Vec::new();
+                                signatures.iter().enumerate().for_each(|(index, signature)| {
+                                    let file_id = file_id_collection.get(index).unwrap();
+                                    let file_object_id = ObjectId::from_str(&file_id);
+                                    match file_object_id {
+                                        Ok(file_object_id)=>{
+                                            file_url_pairs.push(FileIdUrlPair {
+                                                id: file_id_collection.get(index).unwrap().to_string(),
+                                                url:  Some(format!("https://{origin}{prefix}/v2/file/{file_id}?request={insert_request_id}&created={date_created}&expiration={expiration}&nonce={nonce}&signature={signature}",
+                                                    origin = replaced_url ,
+                                                    file_id= file_id,
+                                                    date_created = signature.date_created,
+                                                    expiration = signature.expiration_date,
+                                                    nonce = signature.nonce,
+                                                    signature = signature.hashed_signature_base_64).to_string()),
+                                                error: None
+                                            });
+                                    
+                                            view_file_requests.push(ViewFileRequest {
+                                                request_id: *insert_request_id,
+                                                file_id: file_object_id,
+                                                options: Some(ViewFileRequestOptions{
+                                                    is_consumable: {
+                                                        match is_consumable{
+                                                            Some(option_val) => {option_val},
+                                                            None => false
+                                                        }
+                                                    },
+                                                    is_consumed: false
+                                                })
+                                            });
+                                        }
+                                        Err(_)=>{
+
+                                            file_url_pairs.push(FileIdUrlPair {
+                                                id: file_id_collection.get(index).unwrap().to_string(),
+                                                url: None,
+                                                error: Some(String::from("Invalid file reference format"))
+                                            });
+                                        }
+                                    }
+
+                                });
+                                let _ = db.collection::<ViewFileRequest>(DbCollection::VIEW_FILE_REQUEST.to_string().as_str()).insert_many(view_file_requests, None).await;
+                                return (
+                                    StatusCode::CREATED,
+                                    Json(json!({
+                                        "request_id": insert_request_id,
+                                        "files": file_url_pairs
+                                    })),
+                                ).into_response();
+                            }
+                        }
                     }
+                    None => {
+                        return (
+                            StatusCode::BAD_REQUEST,
+                        ).into_response();
+                    }    
                 }
             }
-            None => {
-                return (
-                    StatusCode::BAD_REQUEST,
-                    Json(json!(
-                        {"data":None::<String>, "message":"Failed to create signed-url"}
-                    )),
-                );
+            Err(status_code)=>{
+                return (status_code).into_response();
             }
+            
         },
         None => {
             return (
                 StatusCode::UNAUTHORIZED,
-                Json(json!(
-                    {"data":None::<String>, "message":"Failed to authorize"}
-                )),
-            )
+            ).into_response()
         }
     }
 }
