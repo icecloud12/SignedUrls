@@ -72,11 +72,11 @@ pub async fn process_signed_url_upload_request_v2(
 )-> impl IntoResponse{
     let query = query.0;
     let request_id = query.request.clone();
-    tracing::info!("");
+    tracing::info!("request_id:{:#?}", request_id);
     if validate_signed_url_v2(None, query, ActionTypes::UPLOAD_V2).await{
 
         let db: &Database = DATABASE.get().unwrap();
-        let request = db.collection::<UploadRequestDocument>(DbCollection::PROJECT.to_string().as_str()).find_one(doc!{
+        let request = db.collection::<UploadRequestDocument>(DbCollection::REQUEST.to_string().as_str()).find_one(doc!{
             "_id": ObjectId::from_str(request_id.unwrap().as_str()).unwrap()
         }, None).await.unwrap().unwrap();
         let project = db.collection::<ProjectDocument>(DbCollection::PROJECT.to_string().as_str()).find_one(doc!{
