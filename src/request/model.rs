@@ -48,7 +48,7 @@ pub struct UploadRequestDocument {
     pub expiration_date: u64,
     pub options: RequestOptions,
     pub permission: String,
-    pub target: String,
+    pub target: Option<String>,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -97,12 +97,17 @@ pub struct ViewRequest {
     pub options: Option<RequestOptions>,
 }
 #[derive(Deserialize)]
-pub struct ViewRequestQueryParamsV2 {
+pub struct RequestQueryParamsV2 {
+    #[serde(rename="r")]
     pub request: Option<String>,
+    #[serde(rename="c")]
     pub created: Option<u64>,
+    #[serde(rename="e")]
     pub expiration: Option<u64>,
+    #[serde(rename="n")]
     pub nonce: Option<u64>,
-    pub signature: Option<String>,
+    #[serde(rename="s")]
+    pub signature: Option<String>
 }
 #[derive(Serialize, Deserialize)]
 pub struct ViewFileRequestOptions {

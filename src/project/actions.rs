@@ -43,12 +43,10 @@ pub async fn create_bucket(bucket_name: String) -> Result<CreatedBucket,()>{
                     let random_salt = SaltString::generate(&mut password_hash::rand_core::OsRng);
                     let argon2 = Argon2::default();
                     let secret_key_hash = argon2
-                        .hash_password(&secret_key_raw, &random_salt)
+                        .hash_password(&secret_key_string.as_bytes(), &random_salt)
                         .unwrap()
                         .to_string();
                     let secret_key_hint = {
-                        let secret_key_string =
-                            general_purpose::URL_SAFE_NO_PAD.encode(secret_key_raw);
                         let last_3: String = secret_key_string
                             .chars()
                             .skip(secret_key_string.len() - 3)
@@ -118,7 +116,7 @@ pub async fn create_bucket_directory(project_id: &String) {
     }
 }
 
-pub async fn validate_api_key(public_key: String, secret_key: Option<String>, action_version:ActionTypes) -> Result<Option<BucketDocument>, StatusCode> {
+pub async fn validate_api_key(public_key: &String, secret_key: Option<&String>, action_version:ActionTypes) -> Result<Option<BucketDocument>, StatusCode> {
     let db: &Database = DATABASE.get().unwrap();
     let project_result: Result<Option<BucketDocument>, mongodb::error::Error> = db
         .collection::<BucketDocument>(DbCollection::BUCKET.to_string().as_str())

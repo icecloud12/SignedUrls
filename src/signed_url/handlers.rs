@@ -6,7 +6,7 @@ use mongodb::{
 };
 
 use axum::{
-    body::{self, Body},
+    body::Body,
     extract::{Json, Multipart, Path, Query},
     response::IntoResponse,
 };
@@ -15,13 +15,10 @@ use tokio_util::io::ReaderStream;
 use crate::{
     file::model::FileDocument,
     network::{db_connection::DATABASE, DbCollection},
-    project::actions::validate_api_key,
-    request::model::{ViewRequest, ViewRequestQueryParamsV2},
-    signed_url::{
-        self,
-        actions::{
-            save_files_to_directory, validate_signed_url, validate_signed_url_v2, ActionTypes,
-        },
+    project::{actions::validate_api_key, models::ProjectDocument},
+    request::model::{RequestQueryParamsV2, UploadRequestDocument, ViewRequest},
+    signed_url::actions::{
+        save_files_to_directory, validate_signed_url, validate_signed_url_v2, ActionTypes,
     },
 };
 use hyper::StatusCode;
@@ -41,9 +38,16 @@ pub async fn process_signed_url_upload_request(
         .map(|param| param.1.clone())
         .collect::<Vec<String>>();
     let request_id: String = collected_params[0].clone();
-
-    if validate_signed_url(collected_params, "upload").await {
-        let save_files_to_directory_result = save_files_to_directory(request_id, multipart).await;
+    
+    if validate_signed_url(collected_params, ActionTypes::UPLOAD_V1.to_string().as_str()).await {
+        let db: &Database = DATABASE.get().unwrap();
+        let request = db.collection::<UploadRequestDocument>(DbCollection::PROJECT.to_string().as_str()).find_one(doc!{
+            "_id": ObjectId::from_str(request_id.as_str()).unwrap()
+        }, None).await.unwrap().unwrap();
+        let project = db.collection::<ProjectDocument>(DbCollection::PROJECT.to_string().as_str()).find_one(doc!{
+            "_id": request.project_id
+        },None).await.unwrap().unwrap();
+        let save_files_to_directory_result = save_files_to_directory(&request._id.to_hex(), &project._id.to_hex(), request.target, request.options, multipart, ActionTypes::UPLOAD_V1).await;
         match save_files_to_directory_result {
             Ok(res) => {
                 return (StatusCode::OK, Json(json!({"data":res})));
@@ -60,6 +64,45 @@ pub async fn process_signed_url_upload_request(
         StatusCode::BAD_REQUEST,
         Json(json!({"data":"Request Expired"})),
     );
+}
+
+pub async fn process_signed_url_upload_request_v2(
+    query: Query<RequestQueryParamsV2>,
+    multipart: Multipart,
+)-> impl IntoResponse{
+    let query = query.0;
+    let request_id = query.request.clone();
+    tracing::info!("");
+    if validate_signed_url_v2(None, query, ActionTypes::UPLOAD_V2).await{
+
+        let db: &Database = DATABASE.get().unwrap();
+        let request = db.collection::<UploadRequestDocument>(DbCollection::PROJECT.to_string().as_str()).find_one(doc!{
+            "_id": ObjectId::from_str(request_id.unwrap().as_str()).unwrap()
+        }, None).await.unwrap().unwrap();
+        let project = db.collection::<ProjectDocument>(DbCollection::PROJECT.to_string().as_str()).find_one(doc!{
+            "_id": request.project_id
+        },None).await.unwrap().unwrap();
+
+        let save_files_to_directory_result = save_files_to_directory(&request._id.to_hex(), &project._id.to_hex(), request.target, request.options, multipart, ActionTypes::UPLOAD_V2).await;
+        match save_files_to_directory_result {
+            Ok(res) => {
+                return (StatusCode::OK, Json(json!({"data":res})));
+            }
+            Err(_) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({"data":"Request could not be completed"})),
+                );
+            }
+        }
+        
+    }else{
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"data":"Request Expired"})),
+        );
+        
+    }
 }
 pub async fn process_signed_url_view_request(
     Path(params): Path<Vec<(String, String)>>,
@@ -149,13 +192,12 @@ pub async fn read_file(file_id: &String, db: &Database) -> (StatusCode, Option<a
 }
 pub async fn process_signed_url_view_request_v2(
     Path(params): Path<Vec<(String, String)>>,
-    query: Query<ViewRequestQueryParamsV2>,
+    query: Query<RequestQueryParamsV2>,
 ) -> impl IntoResponse {
     let db: &Database = DATABASE.get().unwrap();
     if params.len() == 1 {
         let (_file_param_key, file_id) = params.get(0).unwrap();
-        let permission = ActionTypes::VIEW_V2.to_string();
-        if validate_signed_url_v2(file_id, query.0, permission).await {
+        if validate_signed_url_v2(Some(file_id), query.0, ActionTypes::VIEW_V2).await {
             let (status_code, body) = read_file(file_id, db).await;
             if status_code == StatusCode::OK {
                 return (status_code, body.unwrap()).into_response();
@@ -181,7 +223,8 @@ pub async fn delete_file_using_api_key(
         match ObjectId::from_str(file_id.1.clone().as_str()) {
             Ok(file_obj_id) => {
                 if payload.api_key.is_some() {
-                    match validate_api_key(payload.api_key.unwrap(), None, ActionTypes::DELETE_V1).await
+                    match validate_api_key(&payload.api_key.unwrap(), None, ActionTypes::DELETE_V1)
+                        .await
                     {
                         Ok(project_o) => {
                             match project_o {

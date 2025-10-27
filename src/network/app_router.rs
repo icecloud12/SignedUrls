@@ -1,7 +1,7 @@
 use std::env;
 
 use axum::{extract::DefaultBodyLimit, routing::{delete, get, post}, Router};
-use crate::{project::handlers::create_bucket, request::handlers::create_view_request_v2, signed_url::handlers::{delete_file_using_api_key, process_signed_url_view_request_v2}};
+use crate::{project::handlers::create_bucket, request::handlers::{create_upload_request_v2, create_view_request_v2}, signed_url::handlers::{delete_file_using_api_key, process_signed_url_upload_request_v2, process_signed_url_view_request_v2}};
 use crate::request::handlers::{
     create_upload_request, 
     create_view_request_v1,
@@ -28,8 +28,8 @@ pub async fn router()->axum::Router {
         
         //CREATE upload requests
         .route(format!("{}/request/create/upload",prefix).as_str(), post(create_upload_request))//Legal Alias
-        .route(format!("{}/v1/request/create/upload",prefix).as_str(), post(create_upload_request))
-        .route(format!("{}/v2/request/create/upload",prefix).as_str(), post(create_upload_request))//Formalization
+        .route(format!("{}/v1/request/upload",prefix).as_str(), post(create_upload_request))
+        .route(format!("{}/v2/request/upload",prefix).as_str(), post(create_upload_request_v2))//Formalization
 
         //signed-url-view consumer
         .route(format!("{}/id/:request_id/permission/view/created/:created/expiration/:expiration/nonce/:nonce/signature/:signature/file/:file_id",prefix).as_str(),
@@ -43,7 +43,7 @@ pub async fn router()->axum::Router {
         //signed-url upload consumer
         .route(format!("{}/id/:request_id/permission/upload/created/:created/expiration/:expiration/nonce/:nonce/signature/:signature",prefix).as_str(), post(process_signed_url_upload_request))//Legal Alias
         .route(format!("{}/v1/id/:request_id/permission/upload/created/:created/expiration/:expiration/nonce/:nonce/signature/:signature",prefix).as_str(), post(process_signed_url_upload_request))
-        .route(format!("{}/v2/id/:request_id/permission/upload/created/:created/expiration/:expiration/nonce/:nonce/signature/:signature",prefix).as_str(), post(process_signed_url_upload_request))//Formalization
+        .route(format!("{}/v2/upload",prefix).as_str(), post(process_signed_url_upload_request_v2))//Formalization
         
         //public preview
         .route(format!("{}/preview/:file_id",prefix).as_str(), get(process_public_read_access))//Legal Alias

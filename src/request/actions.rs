@@ -46,7 +46,7 @@ pub async fn create_upload_request(
         target,
         is_consumable,
         is_public,
-        public_key:_,
+        public_key: _,
         secret_key: _,
         size_limit,
         mime_types,
@@ -92,24 +92,42 @@ pub async fn create_upload_request(
     let prefix = env::var("PREFIX").unwrap();
     let replaced_url = env::var("REPLACED_URL").unwrap();
     let generated_url: String = format!(
-        "https://{}{}/id/{}/permission/{}/created/{}/expiration/{}/nonce/{}/signature/{}",
+        "https://{}{}/v2/upload?r={}&c={}&e={}&n={}&s={}",
         replaced_url,
         prefix,
         insert_request_id,
-        action_type.to_string(),
         hashed_signature.date_created,
         hashed_signature.expiration_date,
         hashed_signature.nonce,
         hashed_signature.hashed_signature_base_64
     );
-    return (
-        StatusCode::CREATED,
-        Json(json!(
-            {"data":{
-                "request_id": insert_request_id,
-                "url": generated_url
-            }
-        })),
-    )
-        .into_response();
+    match action_type {
+        ActionTypes::UPLOAD_V1 => {
+            return (
+                StatusCode::CREATED,
+                Json(json!(
+                    {"data":{
+                        "request_id": insert_request_id,
+                        "url": generated_url
+                    }
+                })),
+            )
+                .into_response();
+        }
+        ActionTypes::UPLOAD_V2 => {
+            return (
+                StatusCode::CREATED,
+                Json(json!(
+                    {
+                        "request_id": insert_request_id,
+                        "url": generated_url
+                    }
+                )),
+            )
+                .into_response();
+        }
+        _ => {
+            return (StatusCode::INTERNAL_SERVER_ERROR).into_response();
+        }
+    }
 }

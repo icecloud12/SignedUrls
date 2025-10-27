@@ -35,7 +35,7 @@ pub async fn create_upload_request(
     } = post_request;
     if api_key.is_some() {
         let api_key = api_key.unwrap();
-         match validate_api_key(api_key.clone(), None, ActionTypes::UPLOAD_V1).await {
+         match validate_api_key(&api_key, None, ActionTypes::UPLOAD_V1).await {
             Ok(bucket_o)=>{
                 match bucket_o{
                     Some(bucket) => {
@@ -76,20 +76,39 @@ pub async fn create_upload_request(
     }
 }
 
-// pub async fn create_upload_request_v2(Json(post_request): Json<CreateSignedUrlPostRequestV2>) -> impl IntoResponse{
-//     let CreateSignedUrlPostRequestV2 { duration, target, is_consumable, is_public, public_key, secret_key, size_limit, mime_types } = post_request;
-//     match (public_key, secret_key){
-//         (Some(public_key), Some(private_key))=>{
-//             match  validate_api_key(public_key, secret_key, ActionTypes::UPLOAD_V2).await{
-//                 Ok()
-//             }
-//             return (StatusCode::OK).into_response();
-//         }
-//         (_, _) => {
-//             return (StatusCode::UNAUTHORIZED).into_response();
-//         }
-//     }
-// }
+pub async fn create_upload_request_v2(Json(post_request): Json<CreateSignedUrlPostRequestV2>) -> impl IntoResponse{
+    let CreateSignedUrlPostRequestV2 { duration, target, is_consumable, is_public, public_key, secret_key, size_limit, mime_types } = post_request;
+    match (public_key, secret_key){
+        (Some(public_key), Some(secret_key))=>{
+            match  validate_api_key(&public_key, Some(&secret_key), ActionTypes::UPLOAD_V2).await{
+                Ok(bucket_o)=>{
+                    match bucket_o {
+                        Some(bucket) => {
+                            let upload_request_v2 = CreateSignedUrlPostRequestV2{
+                                duration,
+                                is_consumable,
+                                target,
+                                is_public,
+                                public_key: Some(public_key),
+                                secret_key: Some(secret_key),
+                                size_limit,
+                                mime_types
+                            };
+                            return crate::request::actions::create_upload_request(bucket, upload_request_v2, ActionTypes::UPLOAD_V2).await
+                        }
+                        None => {
+                            return (StatusCode::BAD_REQUEST).into_response();
+                        }
+                    }
+                }
+                Err(status_code) => { return (status_code).into_response();}
+            }
+        }
+        (_, _) => {
+            return (StatusCode::UNAUTHORIZED).into_response();
+        }
+    }
+}
 
 
 pub async fn process_public_read_access(
@@ -152,7 +171,7 @@ async fn create_view_request(
         is_consumable
     } = post_request;
     match api_key {
-        Some(api_key) => match validate_api_key(api_key, None, ActionTypes::VIEW_V1).await {
+        Some(api_key) => match validate_api_key(&api_key, None, ActionTypes::VIEW_V1).await {
             Ok(bucket_document)=>{
                 match bucket_document {
                     
@@ -261,7 +280,7 @@ async fn create_view_request(
                                         Ok(file_object_id)=>{
                                             file_url_pairs.push(FileIdUrlPair {
                                                 id: file_id_collection.get(index).unwrap().to_string(),
-                                                url:  Some(format!("https://{origin}{prefix}/v2/file/{file_id}?request={insert_request_id}&created={date_created}&expiration={expiration}&nonce={nonce}&signature={signature}",
+                                                url:  Some(format!("https://{origin}{prefix}/v2/file/{file_id}?r={insert_request_id}&c={date_created}&e={expiration}&n={nonce}&s={signature}",
                                                     origin = replaced_url ,
                                                     file_id= file_id,
                                                     date_created = signature.date_created,
