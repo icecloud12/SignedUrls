@@ -6,7 +6,7 @@ use crate::{
     request::{
         actions::file_reference_is_valid,
         model::{
-            RequestOptions, RequestQueryParamsV2, UploadRequestDocument, ViewFileRequestDocument, ViewFileRequestOptions
+            DefaultRequestOptions, MergeRequestOptions, RequestOptions, RequestQueryParamsV2, UploadRequestDocument, ViewFileRequestDocument, ViewFileRequestOptions
         },
     },
 };
@@ -41,6 +41,11 @@ pub enum ActionTypes {
     DELETE_V2,
 }
 
+pub enum UploadActionTypes{
+    V1,
+    V2
+}
+
 impl ToString for ActionTypes {
     fn to_string(&self) -> String {
         match &self {
@@ -50,6 +55,16 @@ impl ToString for ActionTypes {
             &Self::VIEW_V2 => "view_v2".to_string(),
             &Self::DELETE_V1 => "delete_v1".to_string(),
             &Self::DELETE_V2 => "delete_v2".to_string(),
+        }
+    }
+}
+impl TryFrom<ActionTypes> for UploadActionTypes{
+    type Error = String;
+    fn try_from(value: ActionTypes) -> Result<Self, Self::Error> {
+        match value {
+            ActionTypes::UPLOAD_V1 => Ok(UploadActionTypes::V1),
+            ActionTypes::UPLOAD_V2 => Ok(UploadActionTypes::V2),
+            _ => Err(format!("Not a valid enum type and version"))
         }
     }
 }
@@ -398,9 +413,9 @@ pub async fn save_files_to_directory(
     request_id: &String,
     project_id: &String,
     target: Option<String>,
-    options: RequestOptions,
+    options: Option<RequestOptions>,
     mut multipart: Multipart,
-    version: ActionTypes
+    version: UploadActionTypes
     //param: ValidateSignedUrlResultUploadFiles
 ) -> Result<SaveFilesToDirectoryResult, bool> {
     let mut initial_path: std::path::PathBuf = std::path::PathBuf::from("./data/")
@@ -411,7 +426,13 @@ pub async fn save_files_to_directory(
     }
 
     let mut created_files: Vec<super::models::File> = vec![];
-    let key = if let ActionTypes::UPLOAD_V1 = version { "files" } else { "file" };
+    let key = if let UploadActionTypes::V1 = version { "files" } else { "file" };
+    let merge_options = match options {
+        None => {MergeRequestOptions::default()}
+        Some(r_options) => {
+            MergeRequestOptions::from(r_options)
+        }
+    };
     while let Some(mut part) = multipart.next_field().await.unwrap() {
         if (part.name().unwrap_or_else(|| "")) == key {
             match part.file_name() {
@@ -423,12 +444,12 @@ pub async fn save_files_to_directory(
                     while let Some(streamed_chunk) = &part.chunk().await.unwrap() {
                         chunks.push(streamed_chunk.to_owned());
                     }
-                    let is_public = options.is_public.unwrap_or_else(|| false);
+                     
                     let file_document_insert: FileDocumentInsertRow = FileDocumentInsertRow {
                         file_name: original_file_name.clone(),
                         path: initial_path.to_str().unwrap().to_string(),
                         options: FileDocumentOptions {
-                            is_public: is_public,
+                            is_public: merge_options.is_public,
                         },
                         project_id: ObjectId::from_str(project_id.as_str()).unwrap(),
                         request_id: ObjectId::from_str(request_id.as_str()).unwrap(),
@@ -448,9 +469,9 @@ pub async fn save_files_to_directory(
                         .to_string();
                     let new_file_directory: PathBuf =
                         initial_path.join(format!("{}/", new_file_name));
-                    if !(fs::metadata(&new_file_directory).await.is_ok()
-                        && fs::metadata(&new_file_directory).await.expect("").is_dir())
-                    {
+                    if !( fs::metadata(&new_file_directory).await.is_ok()
+                        && fs::metadata(&new_file_directory).await.expect("").is_dir()) {
+
                         match std::fs::create_dir_all(&new_file_directory) {
                             Ok(_a) => {
                                 //do something on dir creation

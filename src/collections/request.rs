@@ -1,3 +1,5 @@
+use mongodb::bson::Bson;
+
 pub enum Request {
     ID,
     PROJECT_ID,
@@ -24,5 +26,11 @@ impl ToString for Request{
 impl From<Request> for String {
     fn from(value: Request) -> Self {
         value.to_string()
+    }
+}
+
+impl From<Request> for Bson {
+    fn from(value: Request) -> Self {
+        Bson::String(value.to_string())
     }
 }

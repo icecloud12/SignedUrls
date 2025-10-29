@@ -1,6 +1,8 @@
 use mongodb::bson::oid::ObjectId;
 
 use serde::{Deserialize, Serialize};
+
+use crate::project::models::BucketDocument;
 #[derive(Deserialize, Serialize)]
 pub struct RequestOptions {
     pub is_consumable: Option<bool>,
@@ -9,6 +11,52 @@ pub struct RequestOptions {
     pub size_limit: Option<usize>,
     pub mime_types: Option<Vec<String>>
 }
+
+
+pub struct DefaultRequestOptions {
+    pub is_consumable: bool,
+    pub is_consumed: bool,
+    pub is_public: bool,
+    pub size_limit: Option<usize>,
+    pub mime_types: Vec<String>
+    
+}
+
+pub struct MergeRequestOptions {
+    pub is_consumable: bool,
+    pub is_consumed: bool,
+    pub is_public: bool,
+    pub size_limit: Option<usize>,
+    pub mime_types: Vec<String>
+}
+
+
+impl Default for DefaultRequestOptions {
+    fn default() -> Self {
+        DefaultRequestOptions { is_consumable: true, is_consumed: false, is_public: false, size_limit: None, mime_types: vec![] }
+    }
+}
+
+impl From<RequestOptions> for MergeRequestOptions{
+    fn from(value: RequestOptions) -> Self {
+        let DefaultRequestOptions{is_consumable, is_consumed, is_public, mime_types, ..} = DefaultRequestOptions::default();
+        MergeRequestOptions{
+            is_consumable: value.is_consumable.unwrap_or_else(|| is_consumable),
+            is_consumed: value.is_consumed.unwrap_or_else(|| is_consumed),
+            is_public: value.is_public.unwrap_or_else(|| is_public),
+            size_limit: value.size_limit,
+            mime_types: value.mime_types.unwrap_or_else(|| mime_types)
+        }
+    }
+}
+impl Default for MergeRequestOptions {
+    fn default() -> Self {
+        let DefaultRequestOptions { is_consumable, is_consumed, is_public, size_limit, mime_types } = DefaultRequestOptions::default();
+        MergeRequestOptions { is_consumable, is_consumed, is_public, size_limit, mime_types }
+    }
+}
+
+
 #[derive(Deserialize)]
 pub struct CreateSignedUrlPostRequest {
     //pub project_name: Option<String>, //deserialization would throw an error and panics the program (Deprecated and is moved to APIKEY headers)
@@ -128,5 +176,30 @@ pub struct ViewFileRequest {
     pub request_id: ObjectId,
     pub file_id: ObjectId,
     pub options: Option<ViewFileRequestOptions>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct RequestWithBucketDocument {
+    pub _id: ObjectId,
+    #[serde(rename="project_id")]
+    pub bucket_id: ObjectId,
+    pub date_created: u64,
+    pub expiration_date: u64,
+    pub permission: String,
+    pub files: Option<Vec<String>>,
+    pub options: Option<RequestOptions>,
+    pub bucket: Option<BucketDocument>,
+    pub target: Option<String>
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct UploadRequestWithBucketDocument {
+    pub _id: ObjectId,
+    pub date_created: u64,
+    pub expiration_date: u64,
+    pub permission: String,
+    pub options: Option<RequestOptions>,
+    pub bucket: BucketDocument,
+    pub target: Option<String>
 }
 

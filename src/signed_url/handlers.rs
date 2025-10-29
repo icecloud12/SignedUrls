@@ -15,10 +15,10 @@ use tokio_util::io::ReaderStream;
 use crate::{
     file::model::FileDocument,
     network::{db_connection::DATABASE, DbCollection},
-    project::{actions::validate_api_key, models::ProjectDocument},
-    request::model::{RequestQueryParamsV2, UploadRequestDocument, ViewRequest},
+    project::{actions::validate_api_key, models::{BucketDocument, ProjectDocument}},
+    request::model::{RequestQueryParamsV2, RequestWithBucketDocument, UploadRequestDocument, UploadRequestWithBucketDocument, ViewRequest},
     signed_url::actions::{
-        save_files_to_directory, validate_signed_url, validate_signed_url_v2, ActionTypes,
+        save_files_to_directory, validate_signed_url, validate_signed_url_v2, ActionTypes, UploadActionTypes,
     },
 };
 use hyper::StatusCode;
@@ -47,7 +47,7 @@ pub async fn process_signed_url_upload_request(
         let project = db.collection::<ProjectDocument>(DbCollection::PROJECT.to_string().as_str()).find_one(doc!{
             "_id": request.project_id
         },None).await.unwrap().unwrap();
-        let save_files_to_directory_result = save_files_to_directory(&request._id.to_hex(), &project._id.to_hex(), request.target, request.options, multipart, ActionTypes::UPLOAD_V1).await;
+        let save_files_to_directory_result = save_files_to_directory(&request._id.to_hex(), &project._id.to_hex(), request.target, Some(request.options), multipart, UploadActionTypes::try_from(ActionTypes::UPLOAD_V1).unwrap()).await;
         match save_files_to_directory_result {
             Ok(res) => {
                 return (StatusCode::OK, Json(json!({"data":res})));
@@ -76,31 +76,55 @@ pub async fn process_signed_url_upload_request_v2(
     if validate_signed_url_v2(None, query, ActionTypes::UPLOAD_V2).await{
 
         let db: &Database = DATABASE.get().unwrap();
-        let request = db.collection::<UploadRequestDocument>(DbCollection::REQUEST.to_string().as_str()).find_one(doc!{
-            "_id": ObjectId::from_str(request_id.unwrap().as_str()).unwrap()
-        }, None).await.unwrap().unwrap();
-        let project = db.collection::<ProjectDocument>(DbCollection::PROJECT.to_string().as_str()).find_one(doc!{
-            "_id": request.project_id
-        },None).await.unwrap().unwrap();
+        let aggregate_pipeline = vec![
+            doc!{ "$lookup": {
+                    "from": DbCollection::BUCKET,
+                    "localField": signed_urls::collections::Request::PROJECT_ID,
+                    "foreignField": signed_urls::collections::Bucket::ID,
+                    "as": "bucket"
+                }
+            },
+            doc!{ "$unwind": "$bucket" }
+        ];
+        match db.collection::<UploadRequestWithBucketDocument>(DbCollection::REQUEST.to_string().as_str()).aggregate(aggregate_pipeline, None).await {
+              Err(_)=> { return (StatusCode::SERVICE_UNAVAILABLE).into_response()}
+              Ok(mut cursor_document)=>{
+                  //expecting only 1 result
+                  match cursor_document.advance().await {
+                    Err(_)=>{return (StatusCode::SERVICE_UNAVAILABLE).into_response()}                      
+                    Ok(_)=>{
+                        match cursor_document.with_type().deserialize_current() {
+                            Ok(document) => {
+                                let UploadRequestWithBucketDocument { _id: request_id, target, options, bucket: BucketDocument{ _id: bucket_id, .. }, .. } = document;
 
-        let save_files_to_directory_result = save_files_to_directory(&request._id.to_hex(), &project._id.to_hex(), request.target, request.options, multipart, ActionTypes::UPLOAD_V2).await;
-        match save_files_to_directory_result {
-            Ok(res) => {
-                return (StatusCode::OK, Json(json!({"data":res})));
-            }
-            Err(_) => {
-                return (
-                    StatusCode::BAD_REQUEST,
-                    Json(json!({"data":"Request could not be completed"})),
-                );
-            }
+                                let save_files_to_directory_result = save_files_to_directory(&request_id.to_hex(), &bucket_id.to_hex(), target, options, multipart, UploadActionTypes::try_from(ActionTypes::UPLOAD_V2).unwrap()).await;
+                                match save_files_to_directory_result {
+                                    Ok(res) => {
+                                        return (StatusCode::OK, Json(json!({"data":res}))).into_response();
+                                    }
+                                    Err(_) => {
+                                        return (
+                                            StatusCode::BAD_REQUEST,
+                                            Json(json!({"data":"Request could not be completed"})),
+                                        ).into_response();
+                                    }
+                                }
+                            }
+                            Err(e)=>{
+                                tracing::error!("Unable to deserialize current: {e}");
+                                return (StatusCode::INTERNAL_SERVER_ERROR).into_response();
+                            }
+                        }
+                    }
+                  }
+              }
         }
         
     }else{
         return (
             StatusCode::BAD_REQUEST,
             Json(json!({"data":"Request Expired"})),
-        );
+        ).into_response();
         
     }
 }

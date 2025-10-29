@@ -1,3 +1,5 @@
+use mongodb::bson::Bson;
+
 pub enum Bucket {
     ID,
     NAME,
@@ -21,5 +23,11 @@ impl ToString for Bucket {
 impl From<Bucket> for String {
     fn from(value: Bucket) -> Self {
         value.to_string()
+    }
+}
+
+impl From<Bucket> for Bson{
+    fn from(value: Bucket) -> Self {
+        Bson::String(value.to_string())
     }
 }

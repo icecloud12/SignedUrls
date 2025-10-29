@@ -1,4 +1,5 @@
-use mongodb::Database;
+use hyper::StatusCode;
+use mongodb::{bson::Bson, Database};
 
 pub mod app_router;
 pub mod db_connection;
@@ -24,5 +25,17 @@ impl ToString for DbCollection {
             &Self::VIEW_FILE_REQUEST => "view_file_request".to_string(),
             &Self::FILE => "file".to_string(),
         }
+    }
+}
+
+impl From<DbCollection> for String {
+    fn from(value: DbCollection) -> Self {
+        value.to_string()
+    }
+}
+
+impl From<DbCollection> for Bson{
+    fn from(value: DbCollection) -> Self {
+        Bson::String(value.to_string())
     }
 }
