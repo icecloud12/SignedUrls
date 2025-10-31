@@ -1,10 +1,9 @@
 use std::env;
 
 use axum::{extract::DefaultBodyLimit, routing::{delete, get, post}, Router};
-use crate::{project::handlers::create_bucket, request::handlers::{create_upload_request_v2, create_view_request_v2}, signed_url::handlers::{delete_file_using_api_key, process_signed_url_upload_request_v2, process_signed_url_view_request_v2}};
+use crate::{project::handlers::create_bucket, request::{handlers::create_upload_request_v2, view::{create_view_request_v1, create_view_request_v2}}, signed_url::handlers::{delete_file_using_api_key, process_signed_url_upload_request_v2, process_signed_url_view_request_v2}};
 use crate::request::handlers::{
     create_upload_request, 
-    create_view_request_v1,
     process_public_read_access
 };
 use crate::signed_url::handlers::{

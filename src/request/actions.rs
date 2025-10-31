@@ -37,6 +37,7 @@ pub async fn file_reference_is_valid(
 }
 
 pub async fn create_upload_request(
+    db: &Database,
     bucket: BucketDocument,
     upload_request: CreateSignedUrlPostRequestV2,
     action_type: ActionTypes,
@@ -79,7 +80,6 @@ pub async fn create_upload_request(
         target: target,
     };
 
-    let db: &Database = DATABASE.get().unwrap();
     let insert_request_id = &db
         .collection::<UploadRequest>(DbCollection::REQUEST.to_string().as_str())
         .insert_one(doc, None)

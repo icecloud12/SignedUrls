@@ -11,6 +11,7 @@ use crate::{
     },
 };
 use axum::{body::Bytes, extract::Multipart};
+use hyper::StatusCode;
 use mongodb::{
     bson::{doc, oid::ObjectId},
     results::InsertOneResult,
@@ -20,10 +21,7 @@ use rand::{self, Rng};
 use serde_json::from_str;
 use sha2::{Digest, Sha256};
 use std::{
-    num::ParseIntError,
-    path::PathBuf,
-    str::FromStr,
-    time::{SystemTime, UNIX_EPOCH},
+    fmt::Display, num::ParseIntError, path::PathBuf, str::FromStr, time::{SystemTime, UNIX_EPOCH}
 };
 
 use crate::file::model::FileDocumentOptions;
@@ -45,6 +43,28 @@ pub enum UploadActionTypes{
     V1,
     V2
 }
+#[derive(Copy, Clone)]
+pub enum ViewActionTypes {
+    V1,
+    V2
+}
+
+impl From<ViewActionTypes> for ActionTypes{
+    fn from(value: ViewActionTypes) -> Self {
+         match value {
+             ViewActionTypes::V1 => ActionTypes::VIEW_V1,
+             ViewActionTypes::V2 => ActionTypes::VIEW_V2
+         }   
+    }
+}
+impl ToString for ViewActionTypes{
+    fn to_string(&self) -> String {
+        match &self {
+            Self::V1 => ActionTypes::VIEW_V1.to_string(),
+            Self::V2 => ActionTypes::VIEW_V2.to_string()
+        }
+    }
+}
 
 impl ToString for ActionTypes {
     fn to_string(&self) -> String {
@@ -65,6 +85,16 @@ impl TryFrom<ActionTypes> for UploadActionTypes{
             ActionTypes::UPLOAD_V1 => Ok(UploadActionTypes::V1),
             ActionTypes::UPLOAD_V2 => Ok(UploadActionTypes::V2),
             _ => Err(format!("Not a valid enum type and version"))
+        }
+    }
+}
+impl TryInto<ViewActionTypes> for ActionTypes{
+    type Error = StatusCode;
+    fn try_into(self) -> Result<ViewActionTypes, Self::Error> {
+        match self {
+            ActionTypes::VIEW_V1 => Ok(ViewActionTypes::V1),
+            ActionTypes::VIEW_V2 => Ok(ViewActionTypes::V2),
+            _ => Err(StatusCode::BAD_REQUEST)
         }
     }
 }

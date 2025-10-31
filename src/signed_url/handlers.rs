@@ -16,7 +16,7 @@ use crate::{
     file::model::FileDocument,
     network::{db_connection::DATABASE, DbCollection},
     project::{actions::validate_api_key, models::{BucketDocument, ProjectDocument}},
-    request::model::{RequestQueryParamsV2, RequestWithBucketDocument, UploadRequestDocument, UploadRequestWithBucketDocument, ViewRequest},
+    request::model::{RequestQueryParamsV2, UploadRequestDocument, UploadRequestWithBucketDocument, ViewRequest},
     signed_url::actions::{
         save_files_to_directory, validate_signed_url, validate_signed_url_v2, ActionTypes, UploadActionTypes,
     },
@@ -247,7 +247,7 @@ pub async fn delete_file_using_api_key(
         match ObjectId::from_str(file_id.1.clone().as_str()) {
             Ok(file_obj_id) => {
                 if payload.api_key.is_some() {
-                    match validate_api_key(&payload.api_key.unwrap(), None, ActionTypes::DELETE_V1)
+                    match validate_api_key(&db, &payload.api_key.unwrap(), None, ActionTypes::DELETE_V1)
                         .await
                     {
                         Ok(project_o) => {

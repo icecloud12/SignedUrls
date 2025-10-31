@@ -1,4 +1,5 @@
-use mongodb::bson::oid::ObjectId;
+use hyper::StatusCode;
+use mongodb::{bson::oid::ObjectId};
 
 use serde::{Deserialize, Serialize};
 
@@ -130,9 +131,50 @@ pub struct RequestDocumentOptions {
 #[derive(Deserialize)]
 pub struct CreateSignedUrlViewRequest {
     pub duration: Option<u64>,
+    pub files: Option<Vec<String>>,
+    pub public_key: Option<String>,
+    pub secret_key: Option<String>,
+    pub is_consumable: Option<bool>,
+}
+
+#[derive(Deserialize)]
+pub struct CreateSignedUrlViewRequestV1 {
+    pub duration: Option<u64>,
     pub file_id_collection: Option<Vec<String>>,
     pub api_key: Option<String>,
     pub is_consumable: Option<bool>,
+}
+#[derive(Deserialize)]
+pub struct CreateSignedUrlViewRequestV2{
+    pub duration: Option<u64>,
+    pub files: Option<Vec<String>>,
+    pub public_key: Option<String>,
+    pub secret_key: Option<String>,
+    pub is_consumable: Option<bool>,
+    
+}
+impl TryFrom<CreateSignedUrlViewRequestV2> for CreateSignedUrlViewRequest{
+    type Error = StatusCode;
+    fn try_from(value:CreateSignedUrlViewRequestV2) -> Result<CreateSignedUrlViewRequest, Self::Error> {
+        match (&value.public_key, &value.secret_key){
+            (Some(_), Some(_))=>{
+                let CreateSignedUrlViewRequestV2 { duration, files, public_key, secret_key, is_consumable } = value;
+                Ok(CreateSignedUrlViewRequest { duration, files, public_key, secret_key, is_consumable })
+            }
+            _ => {Err(StatusCode::UNAUTHORIZED)}
+
+        }
+    }
+}
+impl TryFrom<CreateSignedUrlViewRequestV1> for CreateSignedUrlViewRequest{
+    type Error = StatusCode;
+    fn try_from(value: CreateSignedUrlViewRequestV1) -> Result<Self, Self::Error> {
+        if value.api_key.is_some(){
+            let CreateSignedUrlViewRequestV1 { duration, file_id_collection, api_key, is_consumable } = value;
+            Ok(CreateSignedUrlViewRequest { duration, files: file_id_collection, public_key: api_key, secret_key: None, is_consumable })
+        }else{Err(StatusCode::UNAUTHORIZED)}
+        
+    }
 }
 
 #[derive(Deserialize, Serialize)]

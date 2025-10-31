@@ -5,7 +5,6 @@ use hyper::StatusCode;
 use mongodb::{bson::doc, Database};
 use std::fs;
 
-use super::models::{ProjectDocument};
 use crate::{network::{db_connection::DATABASE, DbCollection}, project::models::{BucketDocument, CreatedBucket, InsertBucketDocument}, signed_url::actions::ActionTypes
 };
 use base64::{
@@ -116,8 +115,7 @@ pub async fn create_bucket_directory(project_id: &String) {
     }
 }
 
-pub async fn validate_api_key(public_key: &String, secret_key: Option<&String>, action_version:ActionTypes) -> Result<Option<BucketDocument>, StatusCode> {
-    let db: &Database = DATABASE.get().unwrap();
+pub async fn validate_api_key(db: &Database, public_key: &String, secret_key: Option<String>, action_version:ActionTypes) -> Result<Option<BucketDocument>, StatusCode> {
     let project_result: Result<Option<BucketDocument>, mongodb::error::Error> = db
         .collection::<BucketDocument>(DbCollection::BUCKET.to_string().as_str())
         .find_one(
