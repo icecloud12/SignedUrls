@@ -1,10 +1,13 @@
 use std::env;
 
 use crate::network::db_connection::DATABASE;
-use crate::project::models::BucketDocument;
-use crate::request::model::{CreateSignedUrlPostRequestV2, RequestOptions, UploadRequest};
+use crate::models::{
+    project_models::BucketDocument,
+    request_models::{CreateSignedUrlPostRequestV2, RequestOptions, UploadRequest},
+    file_models::FileDocument,
+};
+use crate::network::DbCollection;
 use crate::signed_url::actions::{create_hashed_signature, ActionTypes};
-use crate::{file::model::FileDocument, network::DbCollection};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use hyper::StatusCode;
@@ -12,6 +15,7 @@ use mongodb::bson::doc;
 use mongodb::bson::oid::ObjectId;
 use mongodb::Database;
 use serde_json::json;
+
 pub async fn file_reference_is_valid(
     file_id: ObjectId,
 ) -> Result<FileDocument, (StatusCode, String)> {

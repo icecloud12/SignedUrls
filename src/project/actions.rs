@@ -5,7 +5,10 @@ use hyper::StatusCode;
 use mongodb::{bson::doc, Database};
 use std::fs;
 
-use crate::{network::{db_connection::DATABASE, DbCollection}, project::models::{BucketDocument, CreatedBucket, InsertBucketDocument}, signed_url::actions::ActionTypes
+use crate::{
+    network::{db_connection::DATABASE, DbCollection},
+    models::project_models::{BucketDocument, CreatedBucket, InsertBucketDocument},
+    signed_url::actions::ActionTypes
 };
 use base64::{
     engine::general_purpose,

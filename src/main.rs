@@ -3,8 +3,7 @@ mod network;
 mod project;
 mod request;
 mod signed_url;
-mod file;
-
+mod models;
 use std::{env, net::SocketAddr, path::PathBuf};
 use axum_server::tls_rustls::RustlsConfig;
 use dotenv::dotenv;

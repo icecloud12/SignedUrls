@@ -1,14 +1,9 @@
-use super::models::SaveFilesToDirectoryResult;
 use crate::{
-    file::model::FileDocumentInsertRow,
-    network::{db_connection::DATABASE, DbCollection},
-    project::models::ProjectDocument,
-    request::{
-        actions::file_reference_is_valid,
-        model::{
-            DefaultRequestOptions, MergeRequestOptions, RequestOptions, RequestQueryParamsV2, UploadRequestDocument, ViewFileRequestDocument, ViewFileRequestOptions
-        },
+    models::{
+        self, file_models::{FileDocumentInsertRow, FileDocumentOptions}, project_models::ProjectDocument, request_models::{MergeRequestOptions, RequestDocument, RequestDocumentOptions, RequestOptions, RequestQueryParamsV2, UploadRequestDocument, ViewFileRequestDocument, ViewFileRequestOptions}, signed_url_models::{self, File, SaveFilesToDirectoryResult}
     },
+    network::{db_connection::DATABASE, DbCollection},
+    request::actions::file_reference_is_valid,
 };
 use axum::{body::Bytes, extract::Multipart};
 use hyper::StatusCode;
@@ -21,13 +16,11 @@ use rand::{self, Rng};
 use serde_json::from_str;
 use sha2::{Digest, Sha256};
 use std::{
-    fmt::Display, num::ParseIntError, path::PathBuf, str::FromStr, time::{SystemTime, UNIX_EPOCH}
+    num::ParseIntError, path::PathBuf, str::FromStr, time::{SystemTime, UNIX_EPOCH}
 };
 
-use crate::file::model::FileDocumentOptions;
-use crate::request::model::RequestDocument;
 use tokio::{
-    fs::{self, File},
+    fs::{self, File as TokioFile},
     io::AsyncWriteExt,
 };
 pub enum ActionTypes {
@@ -159,7 +152,7 @@ pub fn hash_parameters(
     return hashed_signature_base_64;
 }
 
-pub async fn validate_signed_url(params: Vec<String>, permission: &str) -> bool {
+pub async fn validate_signed_url_v1(params: Vec<String>, permission: &str) -> bool {
     let (request_id, created, expiration, nonce, signature) = (
         params[0].to_owned(),
         params[1].to_owned(),
@@ -203,7 +196,7 @@ pub async fn validate_signed_url(params: Vec<String>, permission: &str) -> bool 
                 );
                 if replicated_hash == signature {
                     if entry.permission == ActionTypes::UPLOAD_V1.to_string() {
-                        let options: crate::request::model::RequestDocumentOptions =
+                        let options: RequestDocumentOptions =
                             entry.options.unwrap();
                         if options.is_consumable {
                             let filter = doc! {"_id": entry._id};
@@ -429,7 +422,7 @@ pub async fn validate_signed_url_v2(
                     }
                     
                 }
-                (_, _ ,_, _, _) => { return false; }
+                _ => { return false; }
             }
         }
         _ => return false,
@@ -455,7 +448,7 @@ pub async fn save_files_to_directory(
         initial_path = initial_path.join(format!("{}/", target));
     }
 
-    let mut created_files: Vec<super::models::File> = vec![];
+    let mut created_files: Vec<signed_url_models::File> = vec![];
     let key = if let UploadActionTypes::V1 = version { "files" } else { "file" };
     let merge_options = match options {
         None => {MergeRequestOptions::default()}
@@ -553,141 +546,18 @@ pub async fn save_file_to_directory(
     new_file_name: String,
     new_file_path: String,
     file_chunks: Vec<Bytes>,
-) -> super::models::File {
-    let mut file: File = File::create(new_file_path.clone()).await.unwrap();
+) -> signed_url_models::File {
+    let mut file: TokioFile = TokioFile::create(new_file_path.clone()).await.unwrap();
     let mut _i = file_chunks.iter();
     while let Some(file_chunk) = _i.next() {
-        file.write_all(&file_chunk).await;
+        let _ = file.write_all(&file_chunk).await;
     }
 
-    return super::models::File {
+    return models::signed_url_models::File {
         _id: new_file_name,
         file_name: original_file_name,
         path: new_file_path.split("./data").last().unwrap().to_string(),
     };
-}
-pub struct multipartFile {
-    pub file_name: String,
-    pub bytes: Bytes,
-    pub file_size_is_valid: bool,
-}
-pub struct InterceptedFile {
-    pub file_name: String,
-    pub bytes: Bytes,
-}
-pub async fn direct_upload_extract_multipart(
-    mut multipart: Multipart,
-) -> Result<(Vec<multipartFile>, String, bool, bool, usize), String> {
-    let mut multipart_files: Vec<multipartFile> = Vec::new();
-    let mut intercepted_files: Vec<InterceptedFile> = Vec::new();
-
-    let mut target: String = String::new();
-    let mut is_public: bool = false; //default
-    let mut is_consumable: bool = false; //default
-    let mut max_file_size: usize = usize::MAX;
-
-    let mut atleast_one_file: bool = false;
-    let mut target_is_set: bool = false;
-    let mut max_size_is_ok: bool = true;
-
-    while let Some(mut part) = multipart.next_field().await.unwrap() {
-        match part.name() {
-            Some(part_name) => {
-                if part_name == "files" {
-                    let file_name = &part.file_name().unwrap().to_string();
-                    let file_bytes = &part.bytes().await.unwrap();
-
-                    let file_size_is_valid = file_bytes.to_vec().len() <= max_file_size;
-                    intercepted_files.push(InterceptedFile {
-                        file_name: file_name.clone(),
-                        bytes: file_bytes.clone(),
-                        //file_size_is_valid: file_size_is_valid
-                    });
-                    atleast_one_file = true;
-                } else if part_name == "target" {
-                    target = std::str::from_utf8(
-                        part.bytes()
-                            .await
-                            .unwrap()
-                            .into_iter()
-                            .collect::<Vec<u8>>()
-                            .as_ref(),
-                    )
-                    .unwrap()
-                    .to_string();
-                    target_is_set = true;
-                } else if part_name == "is_public" {
-                    is_public = std::str::from_utf8(
-                        part.bytes()
-                            .await
-                            .unwrap()
-                            .into_iter()
-                            .collect::<Vec<u8>>()
-                            .as_ref(),
-                    )
-                    .unwrap()
-                        == "true".to_string();
-                } else if part_name == "is_consumable" {
-                    is_consumable = std::str::from_utf8(
-                        part.bytes()
-                            .await
-                            .unwrap()
-                            .into_iter()
-                            .collect::<Vec<u8>>()
-                            .as_ref(),
-                    )
-                    .unwrap()
-                        == "true".to_string()
-                } else if part_name == "max_file_size" {
-                    //in bytes
-                    match std::str::from_utf8(
-                        part.bytes()
-                            .await
-                            .unwrap()
-                            .into_iter()
-                            .collect::<Vec<u8>>()
-                            .as_ref(),
-                    )
-                    .unwrap()
-                    .to_string()
-                    .parse::<usize>()
-                    {
-                        Ok(val) => {
-                            max_file_size = val;
-                        }
-                        Err(_) => max_size_is_ok = false,
-                    }
-                }
-            }
-            None => {}
-        }
-    }
-    for intercepted_file in intercepted_files {
-        let file_size_is_valid = intercepted_file.bytes.to_vec().len() <= max_file_size;
-        multipart_files.push(multipartFile {
-            file_name: intercepted_file.file_name.clone(),
-            bytes: intercepted_file.bytes.clone(),
-            file_size_is_valid: file_size_is_valid,
-        });
-    }
-
-    if atleast_one_file && target_is_set && max_size_is_ok {
-        return Ok((
-            multipart_files,
-            target,
-            is_public,
-            is_consumable,
-            max_file_size,
-        ));
-    } else {
-        if !atleast_one_file {
-            return Err("no files sent".to_string());
-        } else if !target_is_set {
-            return Err("target is not set".to_string());
-        } else {
-            return Err("max_file_size value is not valid".to_string());
-        }
-    }
 }
 
 pub fn replicate_hash(project_id: &String, file_id: Option<&String>, created: &u64, expiration: &u64, nonce: &u64, permission: &ActionTypes, signature: String)->bool {

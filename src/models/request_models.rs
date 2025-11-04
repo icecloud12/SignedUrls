@@ -3,7 +3,8 @@ use mongodb::{bson::oid::ObjectId};
 
 use serde::{Deserialize, Serialize};
 
-use crate::project::models::BucketDocument;
+use crate::models::project_models::BucketDocument;
+
 #[derive(Deserialize, Serialize)]
 pub struct RequestOptions {
     pub is_consumable: Option<bool>,
@@ -59,7 +60,7 @@ impl Default for MergeRequestOptions {
 
 
 #[derive(Deserialize)]
-pub struct CreateSignedUrlPostRequest {
+pub struct CreateSignedUrlPostRequestV1 {
     //pub project_name: Option<String>, //deserialization would throw an error and panics the program (Deprecated and is moved to APIKEY headers)
     pub duration: Option<u64>,  // defaults to env DEFAULT_DURATION variable
     pub target: Option<String>, //target destination appended to the project-name as the path dir to upload,

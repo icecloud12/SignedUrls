@@ -1,4 +1,3 @@
-use hyper::StatusCode;
 use mongodb::{bson::Bson, Database};
 
 pub mod app_router;

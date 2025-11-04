@@ -1,15 +1,11 @@
 use std::env;
-
 use axum::{extract::DefaultBodyLimit, routing::{delete, get, post}, Router};
-use crate::{project::handlers::create_bucket, request::{handlers::create_upload_request_v2, view::{create_view_request_v1, create_view_request_v2}}, signed_url::handlers::{delete_file_using_api_key, process_signed_url_upload_request_v2, process_signed_url_view_request_v2}};
-use crate::request::handlers::{
-    create_upload_request, 
-    process_public_read_access
-};
-use crate::signed_url::handlers::{
-    process_signed_url_view_request,
-    process_signed_url_upload_request
-};
+use crate::{
+    project::handlers::create_bucket,
+    request::{upload::{create_upload_request_v1, create_upload_request_v2}, view::{create_view_request_v1, create_view_request_v2, process_public_read_access}},
+    signed_url::{handlers::delete_file_using_api_key,
+    process_upload::{process_signed_url_upload_request_v1, process_signed_url_upload_request_v2},
+    process_view::{process_signed_url_view_request_v1, process_signed_url_view_request_v2}}};
 
 pub async fn router()->axum::Router {
     let prefix = env::var("PREFIX").unwrap();
@@ -26,22 +22,22 @@ pub async fn router()->axum::Router {
         .route(format!("{}/v2/request/view",prefix).as_str(), post(create_view_request_v2))//Formalization
         
         //CREATE upload requests
-        .route(format!("{}/request/create/upload",prefix).as_str(), post(create_upload_request))//Legal Alias
-        .route(format!("{}/v1/request/upload",prefix).as_str(), post(create_upload_request))
+        .route(format!("{}/request/create/upload",prefix).as_str(), post(create_upload_request_v1))//Legal Alias
+        .route(format!("{}/v1/request/upload",prefix).as_str(), post(create_upload_request_v1))
         .route(format!("{}/v2/request/upload",prefix).as_str(), post(create_upload_request_v2))//Formalization
 
         //signed-url-view consumer
         .route(format!("{}/id/:request_id/permission/view/created/:created/expiration/:expiration/nonce/:nonce/signature/:signature/file/:file_id",prefix).as_str(),
-            get(process_signed_url_view_request))//Legal Alias
+            get(process_signed_url_view_request_v1))//Legal Alias
         .route(format!("{}/v1/id/:request_id/permission/view/created/:created/expiration/:expiration/nonce/:nonce/signature/:signature/file/:file_id",prefix).as_str(),
-            get(process_signed_url_view_request))
+            get(process_signed_url_view_request_v1))
         //used to read public and protected views
         .route(format!("{}/v2/file/:file_id",prefix).as_str(),
             get(process_signed_url_view_request_v2))
         
         //signed-url upload consumer
-        .route(format!("{}/id/:request_id/permission/upload/created/:created/expiration/:expiration/nonce/:nonce/signature/:signature",prefix).as_str(), post(process_signed_url_upload_request))//Legal Alias
-        .route(format!("{}/v1/id/:request_id/permission/upload/created/:created/expiration/:expiration/nonce/:nonce/signature/:signature",prefix).as_str(), post(process_signed_url_upload_request))
+        .route(format!("{}/id/:request_id/permission/upload/created/:created/expiration/:expiration/nonce/:nonce/signature/:signature",prefix).as_str(), post(process_signed_url_upload_request_v1))//Legal Alias
+        .route(format!("{}/v1/id/:request_id/permission/upload/created/:created/expiration/:expiration/nonce/:nonce/signature/:signature",prefix).as_str(), post(process_signed_url_upload_request_v1))
         .route(format!("{}/v2/upload",prefix).as_str(), post(process_signed_url_upload_request_v2))//Formalization
         
         //public preview

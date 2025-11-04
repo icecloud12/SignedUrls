@@ -1,25 +1,16 @@
-
-use std::str::FromStr;
-
-use super::actions::file_reference_is_valid;
-use crate::network::db_connection::DATABASE;
-use crate::project::actions::validate_api_key;
-use crate::request::model::{CreateSignedUrlPostRequest, CreateSignedUrlPostRequestV2};
-use crate::{signed_url::actions::ActionTypes};
-use axum::{
-    body::Body,
-    extract::{Json, Path},
-    response::IntoResponse,
-};
+use axum::{response::IntoResponse, Json};
 use hyper::StatusCode;
-use mongodb::{bson::oid::ObjectId};
 use serde_json::json;
-use tokio_util::io::ReaderStream;
+use crate::{
+    network::db_connection::DATABASE,
+    project::actions::validate_api_key,
+    models::request_models::{CreateSignedUrlPostRequestV1, CreateSignedUrlPostRequestV2},
+    signed_url::actions::ActionTypes};
 
-pub async fn create_upload_request(
-    Json(post_request): Json<CreateSignedUrlPostRequest>,
+pub async fn create_upload_request_v1(
+    Json(post_request): Json<CreateSignedUrlPostRequestV1>,
 ) -> impl IntoResponse {
-    let CreateSignedUrlPostRequest {
+    let CreateSignedUrlPostRequestV1 {
         duration,
         is_consumable,
         target,
@@ -70,6 +61,7 @@ pub async fn create_upload_request(
     }
 }
 
+
 pub async fn create_upload_request_v2(Json(post_request): Json<CreateSignedUrlPostRequestV2>) -> impl IntoResponse{
     let CreateSignedUrlPostRequestV2 { duration, target, is_consumable, is_public, public_key, secret_key, size_limit, mime_types } = post_request;
     let db = DATABASE.get().unwrap();
@@ -101,53 +93,6 @@ pub async fn create_upload_request_v2(Json(post_request): Json<CreateSignedUrlPo
         }
         (_, _) => {
             return (StatusCode::UNAUTHORIZED).into_response();
-        }
-    }
-}
-
-
-pub async fn process_public_read_access(
-    Path(params): Path<Vec<(String, String)>>,
-) -> impl IntoResponse {
-    let file_id = params[0].1.clone();
-    //check if file is public
-    let file_object_id = ObjectId::from_str(&file_id);
-    if file_object_id.is_err() {
-        return Err((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Internal server error"),
-        ));
-    } else {
-        match file_reference_is_valid(file_object_id.unwrap()).await {
-            Ok(file_document) => {
-                if file_document.options.is_public {
-                    let initial_path = std::path::PathBuf::from(file_document.path.clone());
-                    let file_ext = file_document.file_name.split(".").last().unwrap();
-                    let file_document_id = file_document._id.to_hex();
-                    let path = initial_path.join(format!(
-                        "{}/{}.{}",
-                        file_document_id, file_document_id, file_ext
-                    ));
-                    println!(
-                        "filePath: {}",
-                        &path.as_os_str().to_str().unwrap().to_string()
-                    );
-                    let file = match tokio::fs::File::open(path).await {
-                        Ok(file) => file,
-                        Err(err) => {
-                            return Err((StatusCode::NOT_FOUND, format!("File not found: {}", err)))
-                        }
-                    };
-                    // convert the `AsyncRead` into a `Stream`
-                    let stream = ReaderStream::new(file);
-                    // convert the `Stream` into an `axum::body::HttpBody`
-                    let body = Body::from_stream(stream);
-                    return Ok((StatusCode::OK, body).into_response());
-                } else {
-                    return Err((StatusCode::NOT_FOUND, format!("File not found")));
-                }
-            }
-            Err(response) => return Err(response),
         }
     }
 }
