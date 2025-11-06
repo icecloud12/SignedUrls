@@ -4,6 +4,7 @@ pub enum Bucket {
     ID,
     NAME,
     PUBLIC_KEY,
+    API_KEY,
     HASHED_SECRET_KEY,
     SECRET_KEY_HINT
 }
@@ -14,6 +15,7 @@ impl ToString for Bucket {
             Self::ID => String::from("_id"),
             Self::NAME => String::from("name"),
             Self::PUBLIC_KEY => String::from("public_key"),
+            Self::API_KEY => String::from("api_key"),
             Self::HASHED_SECRET_KEY => String::from("hashed_secret_key"),
             Self::SECRET_KEY_HINT => String::from("secret_key_hint")
         }

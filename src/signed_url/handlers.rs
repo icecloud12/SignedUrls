@@ -15,7 +15,8 @@ use tokio_util::io::ReaderStream;
 use crate::{
     models::{file_models::FileDocument, signed_url_models::DeleteFileUsingApiKey},
     network::{db_connection::DATABASE, DbCollection},
-    project::actions::validate_api_key,
+    project::actions::validate_api_key_v1,
+    project::actions::validate_api_key_v2,
     signed_url::actions::ActionTypes,
 };
 use hyper::StatusCode;
@@ -84,7 +85,7 @@ pub async fn delete_file_using_api_key(
         match ObjectId::from_str(file_id.1.clone().as_str()) {
             Ok(file_obj_id) => {
                 if payload.api_key.is_some() {
-                    match validate_api_key(&db, &payload.api_key.unwrap(), None, ActionTypes::DELETE_V1)
+                    match validate_api_key_v1(&db, &payload.api_key.unwrap())
                         .await
                     {
                         Ok(project_o) => {

@@ -42,7 +42,7 @@ pub async fn file_reference_is_valid(
 
 pub async fn create_upload_request(
     db: &Database,
-    bucket: BucketDocument,
+    bucket_id: ObjectId,
     upload_request: CreateSignedUrlPostRequestV2,
     action_type: ActionTypes,
 ) -> Response<axum::body::Body> {
@@ -57,7 +57,7 @@ pub async fn create_upload_request(
         mime_types,
     } = upload_request;
     let hashed_signature = create_hashed_signature(
-        &bucket._id.to_hex(),
+        &bucket_id.to_hex(),
         &duration.unwrap_or_else(|| {
             std::env::var("DEFAULT_DURATION_AS_SECONDS")
                 .unwrap()
@@ -70,7 +70,7 @@ pub async fn create_upload_request(
     );
 
     let doc: UploadRequest = UploadRequest {
-        project_id: bucket._id,
+        project_id: bucket_id,
         date_created: hashed_signature.date_created.clone(),
         expiration_date: hashed_signature.expiration_date.clone(),
         options: RequestOptions {
@@ -95,18 +95,20 @@ pub async fn create_upload_request(
         .to_string();
     let prefix = env::var("PREFIX").unwrap();
     let replaced_url = env::var("REPLACED_URL").unwrap();
-    let generated_url: String = format!(
-        "https://{}{}/v2/upload?r={}&c={}&e={}&n={}&s={}",
-        replaced_url,
-        prefix,
-        insert_request_id,
-        hashed_signature.date_created,
-        hashed_signature.expiration_date,
-        hashed_signature.nonce,
-        hashed_signature.hashed_signature_base_64
-    );
     match action_type {
         ActionTypes::UPLOAD_V1 => {
+            let generated_url: String = format!(
+                
+                "https://{}{}/v1/id/{}/permission/upload/created/{}/expiration/{}/nonce/{}/signature/{}",
+                replaced_url,
+                prefix,
+                insert_request_id,
+                hashed_signature.date_created,
+                hashed_signature.expiration_date,
+                hashed_signature.nonce,
+                hashed_signature.hashed_signature_base_64
+            );
+
             return (
                 StatusCode::CREATED,
                 Json(json!(
@@ -119,6 +121,17 @@ pub async fn create_upload_request(
                 .into_response();
         }
         ActionTypes::UPLOAD_V2 => {
+            let generated_url: String = format!(
+                "https://{}{}/v2/upload?r={}&c={}&e={}&n={}&s={}",
+                replaced_url,
+                prefix,
+                insert_request_id,
+                hashed_signature.date_created,
+                hashed_signature.expiration_date,
+                hashed_signature.nonce,
+                hashed_signature.hashed_signature_base_64
+            );
+
             return (
                 StatusCode::CREATED,
                 Json(json!(

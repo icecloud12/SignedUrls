@@ -6,9 +6,7 @@ use mongodb::{bson::doc, Database};
 use std::fs;
 
 use crate::{
-    network::{db_connection::DATABASE, DbCollection},
-    models::project_models::{BucketDocument, CreatedBucket, InsertBucketDocument},
-    signed_url::actions::ActionTypes
+    models::project_models::{BucketDocument, CreatedBucket, InsertBucketDocument, ProjectDocument}, network::{db_connection::DATABASE, DbCollection}, signed_url::actions::ActionTypes
 };
 use base64::{
     engine::general_purpose,
@@ -118,7 +116,26 @@ pub async fn create_bucket_directory(project_id: &String) {
     }
 }
 
-pub async fn validate_api_key(db: &Database, public_key: &String, secret_key: Option<String>, action_version:ActionTypes) -> Result<Option<BucketDocument>, StatusCode> {
+pub async fn validate_api_key_v1(db: &Database, api_key: &String) -> Result<Option<ProjectDocument>, StatusCode> {
+    let project_result: Result<Option<ProjectDocument>, mongodb::error::Error> = db
+        .collection::<ProjectDocument>(DbCollection::BUCKET.to_string().as_str())
+        .find_one(doc! { signed_urls::collections::Bucket::API_KEY: api_key }, None)
+        .await;
+
+    match project_result {
+        Ok(project_option) => {
+            match project_option {
+                Some(project) => { Ok(Some(project)) }
+                None => { Err(StatusCode::BAD_REQUEST) }
+            }
+        },
+        Err(_) => {
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
+}
+
+pub async fn validate_api_key_v2(db: &Database, public_key: &String, secret_key: String) -> Result<Option<BucketDocument>, StatusCode> {
     let project_result: Result<Option<BucketDocument>, mongodb::error::Error> = db
         .collection::<BucketDocument>(DbCollection::BUCKET.to_string().as_str())
         .find_one(
@@ -132,27 +149,20 @@ pub async fn validate_api_key(db: &Database, public_key: &String, secret_key: Op
     match project_result {
         Ok(project_option) => match project_option {
             Some(project) => {
-                match action_version {
-                    ActionTypes::UPLOAD_V1 | ActionTypes::VIEW_V1 | ActionTypes::DELETE_V1 => {
-                        Ok(Some(project))
-                    }
-                    ActionTypes::UPLOAD_V2 | ActionTypes::VIEW_V2 | ActionTypes::DELETE_V2 => {
-                        let argon2_instance = Argon2::default();
-                        match PasswordHash::new(&project.hashed_secret_key){
-                            Ok(password_hash)=>{
-                                match argon2_instance.verify_password(secret_key.unwrap().as_bytes(), &password_hash){
-                                    Ok(_) => {
-                                       Ok(Some(project)) 
-                                    }
-                                    Err(_) => {
-                                       Err(StatusCode::UNAUTHORIZED) 
-                                    }
-                                }
+                let argon2_instance = Argon2::default();
+                match PasswordHash::new(&project.hashed_secret_key){
+                    Ok(password_hash)=>{
+                        match argon2_instance.verify_password(secret_key.as_bytes(), &password_hash){
+                            Ok(_) => {
+                               Ok(Some(project)) 
                             }
                             Err(_) => {
-                                Err(StatusCode::INTERNAL_SERVER_ERROR)
+                               Err(StatusCode::UNAUTHORIZED) 
                             }
                         }
+                    }
+                    Err(_) => {
+                        Err(StatusCode::INTERNAL_SERVER_ERROR)
                     }
                 }
             }

@@ -3,7 +3,8 @@ use hyper::StatusCode;
 use serde_json::json;
 use crate::{
     network::db_connection::DATABASE,
-    project::actions::validate_api_key,
+    project::actions::validate_api_key_v1,
+    project::actions::validate_api_key_v2,
     models::request_models::{CreateSignedUrlPostRequestV1, CreateSignedUrlPostRequestV2},
     signed_url::actions::ActionTypes};
 
@@ -17,10 +18,9 @@ pub async fn create_upload_request_v1(
         is_public,
         api_key,
     } = post_request;
-    if api_key.is_some() {
+    if let Some(api_key) = api_key {
         let db = DATABASE.get().unwrap();
-        let api_key = api_key.unwrap();
-        match validate_api_key(&db, &api_key, None, ActionTypes::UPLOAD_V1).await {
+        match validate_api_key_v1(&db, &api_key).await {
             Ok(bucket_o)=>{
                 match bucket_o{
                     Some(bucket) => {
@@ -34,7 +34,7 @@ pub async fn create_upload_request_v1(
                             size_limit: None,
                             mime_types: None,
                         };
-                        return crate::request::actions::create_upload_request(&db, bucket, upload_request_v2, ActionTypes::UPLOAD_V1).await;
+                        return crate::request::actions::create_upload_request(&db, bucket._id, upload_request_v2, ActionTypes::UPLOAD_V1).await;
                     }
                     None => {
                         return (
@@ -67,7 +67,7 @@ pub async fn create_upload_request_v2(Json(post_request): Json<CreateSignedUrlPo
     let db = DATABASE.get().unwrap();
     match (public_key, secret_key){
         (Some(public_key_u), Some(secret_key_u))=>{
-            match  validate_api_key(&db, &public_key_u, Some(secret_key_u.clone()), ActionTypes::UPLOAD_V2).await{
+            match  validate_api_key_v2(&db, &public_key_u, secret_key_u.clone()).await{
                 Ok(bucket_o)=>{
                     match bucket_o {
                         Some(bucket) => {
@@ -81,7 +81,7 @@ pub async fn create_upload_request_v2(Json(post_request): Json<CreateSignedUrlPo
                                 size_limit,
                                 mime_types
                             };
-                            return crate::request::actions::create_upload_request(&db, bucket, upload_request_v2, ActionTypes::UPLOAD_V2).await
+                            return crate::request::actions::create_upload_request(&db, bucket._id, upload_request_v2, ActionTypes::UPLOAD_V2).await
                         }
                         None => {
                             return (StatusCode::BAD_REQUEST).into_response();
