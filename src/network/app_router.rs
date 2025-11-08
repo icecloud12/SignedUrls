@@ -27,9 +27,9 @@ pub async fn router()->axum::Router {
         .route(format!("{}/v2/request/upload",prefix).as_str(), post(create_upload_request_v2))//Formalization
 
         //signed-url-view consumer
-        .route(format!("{}/id/:request_id/permission/view/created/:created/expiration/:expiration/nonce/:nonce/signature/:signature/file/:file_id",prefix).as_str(),
+        .route(format!("{}/id/:request_id/permission/view_v1/created/:created/expiration/:expiration/nonce/:nonce/signature/:signature/file/:file_id",prefix).as_str(),
             get(process_signed_url_view_request_v1))//Legal Alias
-        .route(format!("{}/v1/id/:request_id/permission/view/created/:created/expiration/:expiration/nonce/:nonce/signature/:signature/file/:file_id",prefix).as_str(),
+        .route(format!("{}/v1/id/:request_id/permission/view_v1/created/:created/expiration/:expiration/nonce/:nonce/signature/:signature/file/:file_id",prefix).as_str(),
             get(process_signed_url_view_request_v1))
         //used to read public and protected views
         .route(format!("{}/v2/file/:file_id",prefix).as_str(),
