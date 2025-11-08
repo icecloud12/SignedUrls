@@ -2,12 +2,13 @@ use std::env;
 
 use crate::network::db_connection::DATABASE;
 use crate::models::{
-    project_models::BucketDocument,
     request_models::{CreateSignedUrlPostRequestV2, RequestOptions, UploadRequest},
     file_models::FileDocument,
 };
 use crate::network::DbCollection;
-use crate::signed_url::actions::{create_hashed_signature, ActionTypes};
+use crate::signed_url::{
+    actions::{create_hashed_signature, ActionTypes}, 
+};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use hyper::StatusCode;
@@ -15,6 +16,7 @@ use mongodb::bson::doc;
 use mongodb::bson::oid::ObjectId;
 use mongodb::Database;
 use serde_json::json;
+use signed_urls::collections;
 
 pub async fn file_reference_is_valid(
     file_id: ObjectId,
@@ -22,7 +24,7 @@ pub async fn file_reference_is_valid(
     let db = DATABASE.get().unwrap();
     let file_ref: Result<Option<FileDocument>, mongodb::error::Error> = db
         .collection::<FileDocument>(DbCollection::FILE.to_string().as_str())
-        .find_one(doc! { "_id": file_id}, None)
+        .find_one(doc! { collections::File::ID : file_id}, None)
         .await;
     match file_ref {
         Ok(mongodb_ok) => match mongodb_ok {

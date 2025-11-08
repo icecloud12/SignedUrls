@@ -14,10 +14,7 @@ use tokio_util::io::ReaderStream;
 
 use crate::{
     models::{file_models::FileDocument, signed_url_models::DeleteFileUsingApiKey},
-    network::{db_connection::DATABASE, DbCollection},
-    project::actions::validate_api_key_v1,
-    project::actions::validate_api_key_v2,
-    signed_url::actions::ActionTypes,
+    network::{db_connection::DATABASE, DbCollection}, project::actions::validate_api_key_v1,
 };
 use hyper::StatusCode;
 use serde_json::json;
@@ -30,7 +27,7 @@ pub async fn read_file(file_id: &String, db: &Database) -> (StatusCode, Option<a
         .collection::<FileDocument>(DbCollection::FILE.to_string().as_str())
         .find_one(
             doc! {
-                "_id": ObjectId::from_str(&file_id.as_str()).unwrap()
+                collections::File::ID : ObjectId::from_str(&file_id.as_str()).unwrap()
             },
             None,
         )
@@ -116,7 +113,7 @@ pub async fn delete_file_using_api_key(
                                                 )
                                                 .find_one_and_delete(
                                                     doc! {
-                                                        "_id": file_doc._id
+                                                        collections::File::ID : file_doc._id
                                                     },
                                                     None,
                                                 )

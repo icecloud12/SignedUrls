@@ -3,6 +3,7 @@ use argon2::{
 };
 use hyper::StatusCode;
 use mongodb::{bson::doc, Database};
+use signed_urls::collections;
 use std::fs;
 
 use crate::{
@@ -23,7 +24,7 @@ pub async fn create_bucket(bucket_name: String) -> Result<CreatedBucket,()>{
         .collection::<BucketDocument>(DbCollection::BUCKET.to_string().as_str())
         .find_one(
             doc! {
-                "name": bucket_name.as_str()
+                collections::Bucket::NAME : bucket_name.as_str()
             },
             None,
         )

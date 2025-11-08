@@ -31,7 +31,7 @@ pub async fn process_signed_url_view_request_v1(
         let view_request_document_result = db
             .collection::<ViewRequest>(DbCollection::REQUEST.to_string().as_str())
             .find_one(
-                doc! { collections::ViewFileRequest::REQUEST_ID: request_id},
+                doc! { collections::Request::ID: request_id},
                 None,
             )
             .await

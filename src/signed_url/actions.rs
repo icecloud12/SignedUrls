@@ -15,6 +15,7 @@ use mongodb::{
 use rand::{self, Rng};
 use serde_json::from_str;
 use sha2::{Digest, Sha256};
+use signed_urls::collections;
 use std::{
     num::ParseIntError, path::PathBuf, str::FromStr, time::{SystemTime, UNIX_EPOCH}
 };
@@ -168,12 +169,13 @@ pub async fn validate_signed_url_v1(params: Vec<String>, permission: &str) -> bo
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs();
+        
         if current_time >= created_time.unwrap() && current_time <= expiration_time.unwrap() {
             //fetch project_id from request id
             let db: &Database = DATABASE.get().unwrap();
             let request_entry = db
                 .collection::<RequestDocument>(DbCollection::REQUEST.to_string().as_str())
-                .find_one(doc! {"_id":ObjectId::from_str(&request_id).unwrap()}, None)
+                .find_one(doc! {collections::Request::ID: ObjectId::from_str(&request_id).unwrap()}, None)
                 .await;
             if request_entry.is_ok() {
                 let entry = request_entry.unwrap().unwrap();
@@ -181,7 +183,7 @@ pub async fn validate_signed_url_v1(params: Vec<String>, permission: &str) -> bo
                 let project_id = entry.project_id;
                 let project_entry = db
                     .collection::<ProjectDocument>(DbCollection::PROJECT.to_string().as_str())
-                    .find_one(doc! {"_id": project_id}, None)
+                    .find_one(doc! { collections::Bucket::ID : project_id}, None)
                     .await
                     .unwrap()
                     .unwrap();
@@ -288,7 +290,7 @@ pub async fn validate_signed_url_v2(
                                                         )
                                                         .find_one(
                                                             doc! {
-                                                                "_id": request_object_id
+                                                                collections::Request::ID : request_object_id
                                                             },
                                                             None,
                                                         )
@@ -303,7 +305,7 @@ pub async fn validate_signed_url_v2(
                                                                                 .to_string()
                                                                                 .as_str(),
                                                                             )
-                                                                            .find_one( doc! { "file_id": &file_object_id, "request_id": &request_object_id}, None).await {
+                                                                            .find_one( doc! { collections::ViewFileRequest::FILE_ID: &file_object_id, collections::ViewFileRequest::REQUEST_ID: &request_object_id}, None).await {
                                                                                 Ok(view_file_request_document_option) => {
                                                                                     match view_file_request_document_option {
                                                                                         Some(view_file_request) => {
@@ -320,7 +322,7 @@ pub async fn validate_signed_url_v2(
                                                                                                             return false;
                                                                                                         } else {
                                                                                                             //consume the request
-                                                                                                            let filter = doc! {"_id": view_file_request._id};
+                                                                                                            let filter = doc! {collections::ViewFileRequest::ID: view_file_request._id};
                                                                                                             let update = doc! {"$set": { "options.is_consumed":  true }};
                                                                                                             let _ = db.collection::<ViewFileRequestDocument>(DbCollection::VIEW_FILE_REQUEST.to_string().as_str())
                                                                                                                 .update_one(filter,update,None).await;
@@ -372,16 +374,14 @@ pub async fn validate_signed_url_v2(
             }
         }
         ActionTypes::UPLOAD_V2 => {
-            tracing::info!("here");
             match (request, created, expiration, nonce, signature) {
                 (Some(request), Some(created), Some(expiration), Some(nonce), Some(signature))=>{
                     let current_time: u64 = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
                     if current_time >= created && current_time <= expiration {
                         let db: &Database = DATABASE.get().unwrap();
-                        tracing::info!("request_id: {}",request.as_str());
                         let object_id = ObjectId::from_str(request.as_str()).unwrap();
                         let find_result = db.collection::<UploadRequestDocument>(DbCollection::REQUEST.to_string().as_str()).find_one(
-                            doc!{"_id": object_id}, None
+                            doc!{collections::Request::ID: object_id}, None
                         ).await;
                         match find_result {
                             Ok(request_doc_o)=>{
@@ -406,7 +406,7 @@ pub async fn validate_signed_url_v2(
                                                 (None, _) => { return true;}
                                             }
                                         } else{
-                                            tracing::error!("cannot replicate hash");
+                                            tracing::error!("Failed to replicate hash");
                                             return false;
                                         }
                                     }
@@ -421,7 +421,7 @@ pub async fn validate_signed_url_v2(
                         }
                         //query is ok and returns 1 document
                     } else {
-                        tracing::info!("request expired through valid range");
+                        tracing::info!("request expired, exceeded valid range");
                         return false;
                     }
                     

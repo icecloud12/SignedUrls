@@ -4,6 +4,7 @@ use axum::{extract::{Multipart, Path, Query}, response::IntoResponse, Json};
 use hyper::StatusCode;
 use mongodb::{bson::{doc, oid::ObjectId}, Database};
 use serde_json::json;
+use signed_urls::collections;
 use crate::{
     network::{db_connection::DATABASE, DbCollection},
     models::project_models::{BucketDocument, ProjectDocument},
@@ -23,11 +24,11 @@ pub async fn process_signed_url_upload_request_v1(
     
     if validate_signed_url_v1(collected_params, ActionTypes::UPLOAD_V1.to_string().as_str()).await {
         let db: &Database = DATABASE.get().unwrap();
-        let request = db.collection::<UploadRequestDocument>(DbCollection::PROJECT.to_string().as_str()).find_one(doc!{
-            "_id": ObjectId::from_str(request_id.as_str()).unwrap()
+        let request = db.collection::<UploadRequestDocument>(DbCollection::REQUEST.to_string().as_str()).find_one(doc!{
+            collections::Request::ID : ObjectId::from_str(request_id.as_str()).unwrap()
         }, None).await.unwrap().unwrap();
         let project = db.collection::<ProjectDocument>(DbCollection::PROJECT.to_string().as_str()).find_one(doc!{
-            "_id": request.project_id
+            collections::Bucket::ID : request.project_id
         },None).await.unwrap().unwrap();
         let save_files_to_directory_result = save_files_to_directory(&request._id.to_hex(), &project._id.to_hex(), request.target, Some(request.options), multipart, UploadActionTypes::try_from(ActionTypes::UPLOAD_V1).unwrap()).await;
         match save_files_to_directory_result {
@@ -54,7 +55,6 @@ pub async fn process_signed_url_upload_request_v2(
 )-> impl IntoResponse{
     let query = query.0;
     let request_id = query.request.clone();
-    tracing::info!("request_id:{:#?}", request_id);
     if validate_signed_url_v2(None, query, ActionTypes::UPLOAD_V2).await{
 
         let db: &Database = DATABASE.get().unwrap();
