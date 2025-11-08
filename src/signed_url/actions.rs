@@ -198,21 +198,25 @@ pub async fn validate_signed_url_v1(params: Vec<String>, permission: &str) -> bo
                     if entry.permission == ActionTypes::UPLOAD_V1.to_string() {
                         let options: RequestDocumentOptions =
                             entry.options.unwrap();
-                        if options.is_consumable {
-                            let filter = doc! {"_id": entry._id};
-                            let update = doc! {
-                                "$set": { "options.is_consumed" : true }
-                            };
+                        if options.is_consumed {
+                            return false;
+                        }else{ 
+                            if options.is_consumable {
+                                let filter = doc! {collections::Request::ID : entry._id};
+                                let update = doc! {
+                                    "$set": { "options.is_consumed" : true }
+                                };
 
-                            let _update_result = db
-                                .collection::<ProjectDocument>(
-                                    DbCollection::REQUEST.to_string().as_str(),
-                                )
-                                .update_one(filter, update, None)
-                                .await
-                                .unwrap();
+                                let _update_result = db
+                                    .collection::<RequestDocument>(
+                                        DbCollection::REQUEST.to_string().as_str(),
+                                    )
+                                    .update_one(filter, update, None)
+                                    .await
+                                    .unwrap();
+                            }
+                            return true;
                         }
-                        return true;
                     } else if entry.permission == ActionTypes::VIEW_V1.to_string() {
                         //we we're unable to consume the request because the request(and hash) is shared between requested files
                         return true;
