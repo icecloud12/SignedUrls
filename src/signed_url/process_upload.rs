@@ -52,11 +52,14 @@ pub async fn process_signed_url_upload_request_v2(
     mut multipart: Multipart,
 )-> impl IntoResponse{
     let query = query.0;
-    // let request_id = query.request.clone();
-    if validate_signed_url_v2(None, query, ActionTypes::UPLOAD_V2).await{
+    let request_id = query.request.to_owned().unwrap();
+    if validate_signed_url_v2(None, &query, ActionTypes::UPLOAD_V2).await{
 
         let db: &Database = DATABASE.get().unwrap();
         let aggregate_pipeline = vec![
+            doc!{ "$match": {
+              "_id": ObjectId::from_str(&request_id).unwrap()
+            }},
             doc!{ "$lookup": {
                     "from": DbCollection::BUCKET,
                     "localField": signed_urls::collections::Request::PROJECT_ID,
@@ -75,6 +78,7 @@ pub async fn process_signed_url_upload_request_v2(
                     Ok(_)=>{
                         match cursor_document.with_type().deserialize_current() {
                             Ok(document) => {
+                                tracing::info!("{:#?}", &request_id);
                                 let UploadRequestWithBucketDocument { _id: request_id, target, options, bucket: BucketDocument{ _id: bucket_id, .. }, .. } = document;
                                 //check for file size
                                 let mut initial_path: std::path::PathBuf = std::path::PathBuf::from("./data/")
@@ -91,6 +95,7 @@ pub async fn process_signed_url_upload_request_v2(
 
 
                                 while let Some(mut part) = multipart.next_field().await.unwrap(){
+                                    tracing::info!("{:#?}",part.name().unwrap_or_else(|| ""));
                                     if part.name().unwrap_or_else(|| "") == "file"{
                                         match part.file_name() {
                                             Some(part_file_name) => {
@@ -150,7 +155,7 @@ pub async fn process_signed_url_upload_request_v2(
                                                                     }
                                                                 }
                                                             }
-
+                                                            return (StatusCode::CREATED, Json(json!({"request_id": request_id.to_string(), "file_id": new_file_name}))).into_response();
                                                             // let saved_file = save_file_to_directory(
                                                             //     original_file_name,
                                                             //     new_file_name,

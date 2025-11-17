@@ -235,7 +235,7 @@ pub async fn validate_signed_url_v1(params: Vec<String>, permission: &str) -> bo
 }
 pub async fn validate_signed_url_v2(
     file_id: Option<&String>,
-    query: RequestQueryParamsV2,
+    query: &RequestQueryParamsV2,
     permission: ActionTypes,
 ) -> bool {
 
@@ -275,7 +275,7 @@ pub async fn validate_signed_url_v2(
                                                 .duration_since(UNIX_EPOCH)
                                                 .unwrap()
                                                 .as_secs();
-                                            if current_time >= created && current_time <= expiration {
+                                            if current_time >= *created && current_time <= *expiration {
                                                 let project_id = file.project_id.to_hex();
                                                 if  replicate_hash(&project_id, Some(&file_id), &created, &expiration, &nonce, &permission, signature){
                                                     let db = DATABASE.get().unwrap();
@@ -377,7 +377,7 @@ pub async fn validate_signed_url_v2(
             match (request, created, expiration, nonce, signature) {
                 (Some(request), Some(created), Some(expiration), Some(nonce), Some(signature))=>{
                     let current_time: u64 = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
-                    if current_time >= created && current_time <= expiration {
+                    if current_time >= *created && current_time <= *expiration {
                         let db: &Database = DATABASE.get().unwrap();
                         let object_id = ObjectId::from_str(request.as_str()).unwrap();
                         let find_result = db.collection::<UploadRequestDocument>(DbCollection::REQUEST.to_string().as_str()).find_one(
@@ -564,7 +564,7 @@ pub async fn save_file_to_directory(
     };
 }
 
-pub fn replicate_hash(project_id: &String, file_id: Option<&String>, created: &u64, expiration: &u64, nonce: &u64, permission: &ActionTypes, signature: String)->bool {
+pub fn replicate_hash(project_id: &String, file_id: Option<&String>, created: &u64, expiration: &u64, nonce: &u64, permission: &ActionTypes, signature: &String)->bool {
     let replicated_hash = hash_parameters(
         project_id,
         created,
@@ -573,5 +573,5 @@ pub fn replicate_hash(project_id: &String, file_id: Option<&String>, created: &u
         nonce,
         file_id,
     );
-    replicated_hash == signature
+    &replicated_hash == signature
 }

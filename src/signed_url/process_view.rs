@@ -59,7 +59,7 @@ pub async fn process_signed_url_view_request_v2(
     let db: &Database = DATABASE.get().unwrap();
     if params.len() == 1 {
         let (_file_param_key, file_id) = params.get(0).unwrap();
-        if validate_signed_url_v2(Some(file_id), query.0, ActionTypes::VIEW_V2).await {
+        if validate_signed_url_v2(Some(file_id), &query.0, ActionTypes::VIEW_V2).await {
             let (status_code, body) = read_file(file_id, db).await;
             if status_code == StatusCode::OK {
                 return (status_code, body.unwrap()).into_response();
