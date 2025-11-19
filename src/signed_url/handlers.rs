@@ -50,13 +50,14 @@ pub async fn read_file(file_id: &String, db: &Database) -> (StatusCode, Option<a
                 let file_path = PathBuf::from(file_document.path)
                     .join(&file_id)
                     .join(file_name);
-                match tokio::fs::File::open(file_path).await {
+                match tokio::fs::File::open(&file_path).await {
                     Ok(file) => {
                         let stream = ReaderStream::new(file);
                         let body = Body::from_stream(stream);
                         return (StatusCode::OK, Some(body));
                     }
                     Err(_) => {
+                        tracing::warn!("File not found in: {:#?}",file_path);
                         return (StatusCode::NOT_FOUND, None);
                     }
                 }
