@@ -130,7 +130,7 @@ pub async fn process_signed_url_upload_request_v2(
                                                     match std::fs::create_dir_all(&new_file_directory) {
                                                         Ok(_a) => {
                                                             //do something on dir creation
-                                                            let file_extention = new_file_name.split(".").last().unwrap();
+                                                            let file_extention = file_name.split(".").last().unwrap();
                                                             let new_file_path: String = new_file_directory
                                                                 .clone()
                                                                 .join(format!("{}.{}", new_file_name, file_extention))
