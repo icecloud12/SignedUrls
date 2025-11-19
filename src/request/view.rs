@@ -356,7 +356,7 @@ pub async fn create_view_request_v2(
                                 return (
                                     StatusCode::CREATED,
                                     Json(json!({
-                                        "request_id": insert_request_id,
+                                        "request_id": insert_request_id.to_hex(),
                                         "files": file_url_pairs
                                     })),
                                 ).into_response();
