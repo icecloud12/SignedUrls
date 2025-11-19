@@ -95,7 +95,6 @@ pub async fn process_signed_url_upload_request_v2(
 
 
                                 while let Some(mut part) = multipart.next_field().await.unwrap(){
-                                    tracing::info!("{:#?}",part.name().unwrap_or_else(|| ""));
                                     if part.name().unwrap_or_else(|| "") == "file"{
                                         match part.file_name() {
                                             Some(part_file_name) => {

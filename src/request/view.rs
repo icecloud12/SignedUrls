@@ -286,7 +286,6 @@ pub async fn create_view_request_v2(
                                             &version.to_string(),
                                             Some(file_id)
                                         );
-                                    println!("pushing signature");
                                     signatures.push(created_hashed_signature);
                                 });
                                 let temp_sig = signatures.get(0).unwrap();
