@@ -143,9 +143,9 @@ pub struct RequestDocument {
 
 #[derive(Deserialize, Serialize, Debug)]
 pub struct RequestDocumentOptions {
-    pub is_consumable: bool,
-    pub is_consumed: bool,
-    pub is_public: bool,
+    pub is_consumable: Option<bool>,
+    pub is_consumed: Option<bool>,
+    pub is_public: Option<bool>,
 }
 
 //accepts a duration in seconds and a vector of file_ids

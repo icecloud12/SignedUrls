@@ -42,7 +42,7 @@ pub async fn process_signed_url_upload_request_v1(
     {
         let db: &Database = DATABASE.get().unwrap();
         let request = db
-            .collection::<UploadRequestDocument>(DbCollection::PROJECT.to_string().as_str())
+            .collection::<UploadRequestDocument>(DbCollection::REQUEST.to_string().as_str())
             .find_one(
                 doc! {
                     "_id": ObjectId::from_str(request_id.as_str()).unwrap()

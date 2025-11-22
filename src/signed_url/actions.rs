@@ -1,6 +1,14 @@
 use crate::{
     models::{
-        self, file_models::{FileDocumentInsertRow, FileDocumentOptions}, project_models::ProjectDocument, request_models::{MergeRequestOptions, RequestDocument, RequestDocumentOptions, RequestOptions, RequestQueryParamsV2, UploadRequestDocument, ViewFileRequestDocument, ViewFileRequestOptions}, signed_url_models::{self, File, SaveFilesToDirectoryResult}
+        self,
+        file_models::{FileDocumentInsertRow, FileDocumentOptions},
+        project_models::ProjectDocument,
+        request_models::{
+            MergeRequestOptions, RequestDocument, RequestDocumentOptions, RequestOptions,
+            RequestQueryParamsV2, UploadRequestDocument, ViewFileRequestDocument,
+            ViewFileRequestOptions,
+        },
+        signed_url_models::{self, File, SaveFilesToDirectoryResult},
     },
     network::{db_connection::DATABASE, DbCollection},
     request::actions::file_reference_is_valid,
@@ -16,7 +24,10 @@ use rand::{self, Rng};
 use serde_json::from_str;
 use sha2::{Digest, Sha256};
 use std::{
-    num::ParseIntError, path::PathBuf, str::FromStr, time::{SystemTime, UNIX_EPOCH}
+    num::ParseIntError,
+    path::PathBuf,
+    str::FromStr,
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 use tokio::{
@@ -32,29 +43,29 @@ pub enum ActionTypes {
     DELETE_V2,
 }
 
-pub enum UploadActionTypes{
+pub enum UploadActionTypes {
     V1,
-    V2
+    V2,
 }
 #[derive(Copy, Clone)]
 pub enum ViewActionTypes {
     V1,
-    V2
+    V2,
 }
 
-impl From<ViewActionTypes> for ActionTypes{
+impl From<ViewActionTypes> for ActionTypes {
     fn from(value: ViewActionTypes) -> Self {
-         match value {
-             ViewActionTypes::V1 => ActionTypes::VIEW_V1,
-             ViewActionTypes::V2 => ActionTypes::VIEW_V2
-         }   
+        match value {
+            ViewActionTypes::V1 => ActionTypes::VIEW_V1,
+            ViewActionTypes::V2 => ActionTypes::VIEW_V2,
+        }
     }
 }
-impl ToString for ViewActionTypes{
+impl ToString for ViewActionTypes {
     fn to_string(&self) -> String {
         match &self {
             Self::V1 => ActionTypes::VIEW_V1.to_string(),
-            Self::V2 => ActionTypes::VIEW_V2.to_string()
+            Self::V2 => ActionTypes::VIEW_V2.to_string(),
         }
     }
 }
@@ -71,23 +82,23 @@ impl ToString for ActionTypes {
         }
     }
 }
-impl TryFrom<ActionTypes> for UploadActionTypes{
+impl TryFrom<ActionTypes> for UploadActionTypes {
     type Error = String;
     fn try_from(value: ActionTypes) -> Result<Self, Self::Error> {
         match value {
             ActionTypes::UPLOAD_V1 => Ok(UploadActionTypes::V1),
             ActionTypes::UPLOAD_V2 => Ok(UploadActionTypes::V2),
-            _ => Err(format!("Not a valid enum type and version"))
+            _ => Err(format!("Not a valid enum type and version")),
         }
     }
 }
-impl TryInto<ViewActionTypes> for ActionTypes{
+impl TryInto<ViewActionTypes> for ActionTypes {
     type Error = StatusCode;
     fn try_into(self) -> Result<ViewActionTypes, Self::Error> {
         match self {
             ActionTypes::VIEW_V1 => Ok(ViewActionTypes::V1),
             ActionTypes::VIEW_V2 => Ok(ViewActionTypes::V2),
-            _ => Err(StatusCode::BAD_REQUEST)
+            _ => Err(StatusCode::BAD_REQUEST),
         }
     }
 }
@@ -168,13 +179,16 @@ pub async fn validate_signed_url_v1(params: Vec<String>, permission: &str) -> bo
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs();
+
         if current_time >= created_time.unwrap() && current_time <= expiration_time.unwrap() {
+            tracing::info!("not time expired");
             //fetch project_id from request id
             let db: &Database = DATABASE.get().unwrap();
             let request_entry = db
                 .collection::<RequestDocument>(DbCollection::REQUEST.to_string().as_str())
                 .find_one(doc! {"_id":ObjectId::from_str(&request_id).unwrap()}, None)
                 .await;
+            tracing::info!("{:#?}", request_entry);
             if request_entry.is_ok() {
                 let entry = request_entry.unwrap().unwrap();
 
@@ -196,23 +210,27 @@ pub async fn validate_signed_url_v1(params: Vec<String>, permission: &str) -> bo
                 );
                 if replicated_hash == signature {
                     if entry.permission == ActionTypes::UPLOAD_V1.to_string() {
-                        let options: RequestDocumentOptions =
-                            entry.options.unwrap();
-                        if options.is_consumable {
-                            let filter = doc! {"_id": entry._id};
-                            let update = doc! {
-                                "$set": { "options.is_consumed" : true }
-                            };
-
-                            let _update_result = db
-                                .collection::<ProjectDocument>(
-                                    DbCollection::REQUEST.to_string().as_str(),
-                                )
-                                .update_one(filter, update, None)
-                                .await
-                                .unwrap();
+                        match entry.options {
+                            None => {
+                                return true;
+                            }
+                            Some(options) => {
+                                if options.is_consumable.is_some() {
+                                    let filter = doc! {"_id": entry._id};
+                                    let update = doc! {
+                                        "$set": { "options.is_consumed" : true }
+                                    };
+                                    let _update_result = db
+                                        .collection::<ProjectDocument>(
+                                            DbCollection::REQUEST.to_string().as_str(),
+                                        )
+                                        .update_one(filter, update, None)
+                                        .await
+                                        .unwrap();
+                                }
+                                return true;
+                            }
                         }
-                        return true;
                     } else if entry.permission == ActionTypes::VIEW_V1.to_string() {
                         //we we're unable to consume the request because the request(and hash) is shared between requested files
                         return true;
@@ -223,7 +241,9 @@ pub async fn validate_signed_url_v1(params: Vec<String>, permission: &str) -> bo
                     return false;
                 }
             }
+            tracing::info!("no request_entry");
         }
+        tracing::info!("required time expired");
     }
     return false;
 }
@@ -232,7 +252,6 @@ pub async fn validate_signed_url_v2(
     query: RequestQueryParamsV2,
     permission: ActionTypes,
 ) -> bool {
-
     //check param files are all Some
     let RequestQueryParamsV2 {
         request,
@@ -269,9 +288,18 @@ pub async fn validate_signed_url_v2(
                                                 .duration_since(UNIX_EPOCH)
                                                 .unwrap()
                                                 .as_secs();
-                                            if current_time >= created && current_time <= expiration {
+                                            if current_time >= created && current_time <= expiration
+                                            {
                                                 let project_id = file.project_id.to_hex();
-                                                if  replicate_hash(&project_id, Some(&file_id), &created, &expiration, &nonce, &permission, signature){
+                                                if replicate_hash(
+                                                    &project_id,
+                                                    Some(&file_id),
+                                                    &created,
+                                                    &expiration,
+                                                    &nonce,
+                                                    &permission,
+                                                    signature,
+                                                ) {
                                                     let db = DATABASE.get().unwrap();
                                                     //get request record
                                                     let request_object_id =
@@ -293,7 +321,9 @@ pub async fn validate_signed_url_v2(
                                                         Ok(option_record) => {
                                                             match option_record {
                                                                 Some(record) => {
-                                                                    if record.permission == permission.to_string() {
+                                                                    if record.permission
+                                                                        == permission.to_string()
+                                                                    {
                                                                         match db.collection::<ViewFileRequestDocument>(
                                                                             DbCollection::VIEW_FILE_REQUEST
                                                                                 .to_string()
@@ -370,59 +400,83 @@ pub async fn validate_signed_url_v2(
         ActionTypes::UPLOAD_V2 => {
             tracing::info!("here");
             match (request, created, expiration, nonce, signature) {
-                (Some(request), Some(created), Some(expiration), Some(nonce), Some(signature))=>{
-                    let current_time: u64 = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+                (Some(request), Some(created), Some(expiration), Some(nonce), Some(signature)) => {
+                    let current_time: u64 = SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap()
+                        .as_secs();
                     if current_time >= created && current_time <= expiration {
                         let db: &Database = DATABASE.get().unwrap();
-                        tracing::info!("request_id: {}",request.as_str());
+                        tracing::info!("request_id: {}", request.as_str());
                         let object_id = ObjectId::from_str(request.as_str()).unwrap();
-                        let find_result = db.collection::<UploadRequestDocument>(DbCollection::REQUEST.to_string().as_str()).find_one(
-                            doc!{"_id": object_id}, None
-                        ).await;
+                        let find_result = db
+                            .collection::<UploadRequestDocument>(
+                                DbCollection::REQUEST.to_string().as_str(),
+                            )
+                            .find_one(doc! {"_id": object_id}, None)
+                            .await;
                         match find_result {
-                            Ok(request_doc_o)=>{
+                            Ok(request_doc_o) => {
                                 match request_doc_o {
-                                    Some(request_doc)=>{
-                                        if replicate_hash(&request_doc.project_id.to_hex(), None, &created, &expiration, &nonce, &permission, signature){
-                                            let RequestOptions{ is_consumable, is_consumed, ..} = request_doc.options; 
+                                    Some(request_doc) => {
+                                        if replicate_hash(
+                                            &request_doc.project_id.to_hex(),
+                                            None,
+                                            &created,
+                                            &expiration,
+                                            &nonce,
+                                            &permission,
+                                            signature,
+                                        ) {
+                                            let RequestOptions {
+                                                is_consumable,
+                                                is_consumed,
+                                                ..
+                                            } = request_doc.options;
                                             match (is_consumable, is_consumed) {
-                                                (Some(is_consumable), is_consumed)=>{
-                                                    let is_consumed = is_consumed.unwrap_or_else(|| false);
+                                                (Some(is_consumable), is_consumed) => {
+                                                    let is_consumed =
+                                                        is_consumed.unwrap_or_else(|| false);
                                                     if is_consumable {
-                                                        if is_consumed { return true }
-                                                        else {
+                                                        if is_consumed {
+                                                            return true;
+                                                        } else {
                                                             //consume it
-                                                            let filter = doc!{ signed_urls::collections::Bucket::ID.to_string().as_str(): request_doc._id};
-                                                            let update = doc!{ "$set": { "options.is_consumed": true }};
+                                                            let filter = doc! { signed_urls::collections::Bucket::ID.to_string().as_str(): request_doc._id};
+                                                            let update = doc! { "$set": { "options.is_consumed": true }};
                                                             let _ =db.collection::<UploadRequestDocument>(DbCollection::REQUEST.to_string().as_str()).update_one(filter, update, None);
                                                             return true;
                                                         }
-                                                    } else {return true}
+                                                    } else {
+                                                        return true;
+                                                    }
                                                 }
-                                                (None, _) => { return true;}
+                                                (None, _) => {
+                                                    return true;
+                                                }
                                             }
-                                        } else{
+                                        } else {
                                             tracing::error!("cannot replicate hash");
                                             return false;
                                         }
                                     }
-                                    None => return false
+                                    None => return false,
                                 }
                             }
                             Err(mongodb_error) => {
-                                
-                                tracing::error!("{:#?}",mongodb_error);
+                                tracing::error!("{:#?}", mongodb_error);
                                 return false;
-                            }//this should return status code
+                            } //this should return status code
                         }
                         //query is ok and returns 1 document
                     } else {
                         tracing::info!("request expired through valid range");
                         return false;
                     }
-                    
                 }
-                _ => { return false; }
+                _ => {
+                    return false;
+                }
             }
         }
         _ => return false,
@@ -438,23 +492,23 @@ pub async fn save_files_to_directory(
     target: Option<String>,
     options: Option<RequestOptions>,
     mut multipart: Multipart,
-    version: UploadActionTypes
-    //param: ValidateSignedUrlResultUploadFiles
+    version: UploadActionTypes, //param: ValidateSignedUrlResultUploadFiles
 ) -> Result<SaveFilesToDirectoryResult, bool> {
-    let mut initial_path: std::path::PathBuf = std::path::PathBuf::from("./data/")
-        .join(format!("{}/", project_id.clone()));
-    if let Some(target) = target{
-        
+    let mut initial_path: std::path::PathBuf =
+        std::path::PathBuf::from("./data/").join(format!("{}/", project_id.clone()));
+    if let Some(target) = target {
         initial_path = initial_path.join(format!("{}/", target));
     }
 
     let mut created_files: Vec<signed_url_models::File> = vec![];
-    let key = if let UploadActionTypes::V1 = version { "files" } else { "file" };
+    let key = if let UploadActionTypes::V1 = version {
+        "files"
+    } else {
+        "file"
+    };
     let merge_options = match options {
-        None => {MergeRequestOptions::default()}
-        Some(r_options) => {
-            MergeRequestOptions::from(r_options)
-        }
+        None => MergeRequestOptions::default(),
+        Some(r_options) => MergeRequestOptions::from(r_options),
     };
     while let Some(mut part) = multipart.next_field().await.unwrap() {
         if (part.name().unwrap_or_else(|| "")) == key {
@@ -467,7 +521,7 @@ pub async fn save_files_to_directory(
                     while let Some(streamed_chunk) = &part.chunk().await.unwrap() {
                         chunks.push(streamed_chunk.to_owned());
                     }
-                     
+
                     let file_document_insert: FileDocumentInsertRow = FileDocumentInsertRow {
                         file_name: original_file_name.clone(),
                         path: initial_path.to_str().unwrap().to_string(),
@@ -477,7 +531,7 @@ pub async fn save_files_to_directory(
                         project_id: ObjectId::from_str(project_id.as_str()).unwrap(),
                         request_id: ObjectId::from_str(request_id.as_str()).unwrap(),
                     };
-                    let db: &Database =  DATABASE.get().unwrap();
+                    let db: &Database = DATABASE.get().unwrap();
                     let insert_file_insert_result: InsertOneResult = db
                         .collection::<FileDocumentInsertRow>(
                             DbCollection::FILE.to_string().as_str(),
