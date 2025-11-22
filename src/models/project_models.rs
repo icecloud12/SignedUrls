@@ -6,27 +6,26 @@ use serde::{Deserialize, Serialize};
 //     pub api_key:String,
 // }
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct ProjectDocument{
-    pub _id:ObjectId,
-    pub name:String,
-    pub api_key:String,
+pub struct ProjectDocument {
+    pub _id: ObjectId,
+    pub name: String,
+    pub api_key: String,
 }
 #[derive(Serialize)]
 pub struct InsertBucketDocument<'a> {
     pub name: &'a String,
-    pub public_key : &'a String,
-    pub hashed_secret_key:&'a String,
-    pub secret_key_hint: &'a String
-    
+    pub public_key: &'a String,
+    pub hashed_secret_key: &'a String,
+    pub secret_key_hint: &'a String,
 }
 #[derive(Deserialize, Serialize)]
 pub struct BucketDocument {
     pub _id: ObjectId,
     pub name: String,
-    pub public_key : String,
+    pub public_key: String,
+    pub api_key: Option<String>,
     pub hashed_secret_key: String,
-    pub secret_key_hint: String
-    
+    pub secret_key_hint: String,
 }
 
 #[derive(Serialize)]
@@ -35,5 +34,5 @@ pub struct CreatedBucket {
     pub name: String,
     pub public_key: String,
     pub secret_key: String,
-    pub secret_key_hint: String
+    pub secret_key_hint: String,
 }
