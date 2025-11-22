@@ -1,23 +1,23 @@
 use argon2::{
-    password_hash::{self, PasswordHasher, SaltString}, Argon2, PasswordHash, PasswordVerifier
+    password_hash::{self, PasswordHasher, SaltString},
+    Argon2, PasswordHash, PasswordVerifier,
 };
 use hyper::StatusCode;
 use mongodb::{bson::doc, Database};
 use std::fs;
 
 use crate::{
+    models::project_models::{
+        BucketDocument, CreatedBucket, InsertBucketDocument, ProjectDocument,
+    },
     network::{db_connection::DATABASE, DbCollection},
-    models::project_models::{BucketDocument, CreatedBucket, InsertBucketDocument},
-    signed_url::actions::ActionTypes
+    signed_url::actions::ActionTypes,
 };
-use base64::{
-    engine::general_purpose,
-    Engine as _,
-};
+use base64::{engine::general_purpose, Engine as _};
 use rand::{self, RngCore};
 pub static PUBLIC_KEY_LENGTH: usize = 16;
 pub static SECRET_KEY_LENGTH: usize = 32;
-pub async fn create_bucket(bucket_name: String) -> Result<CreatedBucket,()>{
+pub async fn create_bucket(bucket_name: String) -> Result<CreatedBucket, ()> {
     let db = DATABASE.get().unwrap();
 
     //check if exists
@@ -87,8 +87,9 @@ pub async fn create_bucket(bucket_name: String) -> Result<CreatedBucket,()>{
             // Some(y)
             //return ret;
         }
-        Err(_error) => { //something went wrong in fetching data
-             Err(())
+        Err(_error) => {
+            //something went wrong in fetching data
+            Err(())
         }
     }
     // return x;
@@ -118,50 +119,61 @@ pub async fn create_bucket_directory(project_id: &String) {
     }
 }
 
-pub async fn validate_api_key(db: &Database, public_key: &String, secret_key: Option<String>, action_version:ActionTypes) -> Result<Option<BucketDocument>, StatusCode> {
-    let project_result: Result<Option<BucketDocument>, mongodb::error::Error> = db
-        .collection::<BucketDocument>(DbCollection::BUCKET.to_string().as_str())
-        .find_one(
-            doc! {
-                signed_urls::collections::Bucket::PUBLIC_KEY : public_key
-            },
-            None,
-        )
-        .await;
-
-    match project_result {
-        Ok(project_option) => match project_option {
-            Some(project) => {
-                match action_version {
-                    ActionTypes::UPLOAD_V1 | ActionTypes::VIEW_V1 | ActionTypes::DELETE_V1 => {
-                        Ok(Some(project))
-                    }
-                    ActionTypes::UPLOAD_V2 | ActionTypes::VIEW_V2 | ActionTypes::DELETE_V2 => {
+pub async fn validate_api_key(
+    db: &Database,
+    public_key: &String,
+    secret_key: Option<String>,
+    action_version: ActionTypes,
+) -> Result<Option<BucketDocument>, StatusCode> {
+    match action_version {
+        ActionTypes::UPLOAD_V1 | ActionTypes::VIEW_V1 | ActionTypes::DELETE_V1 => {
+            let project_result: Result<Option<BucketDocument>, mongodb::error::Error> = db
+                .collection::<BucketDocument>(DbCollection::PROJECT.to_string().as_str())
+                .find_one(
+                    doc! {
+                        signed_urls::collections::Bucket::API_KEY : public_key
+                    },
+                    None,
+                )
+                .await;
+            match project_result {
+                Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+                Ok(project_option) => match project_option {
+                    Some(project) => Ok(Some(project)),
+                    None => Err(StatusCode::BAD_REQUEST),
+                },
+            }
+        }
+        ActionTypes::UPLOAD_V2 | ActionTypes::VIEW_V2 | ActionTypes::DELETE_V2 => {
+            let project_result: Result<Option<BucketDocument>, mongodb::error::Error> = db
+                .collection::<BucketDocument>(DbCollection::BUCKET.to_string().as_str())
+                .find_one(
+                    doc! {
+                        signed_urls::collections::Bucket::PUBLIC_KEY : public_key
+                    },
+                    None,
+                )
+                .await;
+            match project_result {
+                Ok(project_option) => match project_option {
+                    Some(project) => {
                         let argon2_instance = Argon2::default();
-                        match PasswordHash::new(&project.hashed_secret_key){
-                            Ok(password_hash)=>{
-                                match argon2_instance.verify_password(secret_key.unwrap().as_bytes(), &password_hash){
-                                    Ok(_) => {
-                                       Ok(Some(project)) 
-                                    }
-                                    Err(_) => {
-                                       Err(StatusCode::UNAUTHORIZED) 
-                                    }
+                        match PasswordHash::new(&project.hashed_secret_key) {
+                            Ok(password_hash) => {
+                                match argon2_instance
+                                    .verify_password(secret_key.unwrap().as_bytes(), &password_hash)
+                                {
+                                    Ok(_) => Ok(Some(project)),
+                                    Err(_) => Err(StatusCode::UNAUTHORIZED),
                                 }
                             }
-                            Err(_) => {
-                                Err(StatusCode::INTERNAL_SERVER_ERROR)
-                            }
+                            Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
                         }
                     }
-                }
+                    None => Err(StatusCode::BAD_REQUEST),
+                },
+                Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
             }
-            None => {
-                Err(StatusCode::BAD_REQUEST)
-            }
-        },
-        Err(_) => {
-            Err(StatusCode::INTERNAL_SERVER_ERROR)
         }
     }
 }
