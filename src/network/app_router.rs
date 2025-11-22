@@ -13,7 +13,7 @@ pub async fn router()->axum::Router {
     let router = Router::new()
         //create the API_Key
         .route(format!("{}/project/create",prefix).as_str(), post(create_bucket))//Legal Alias
-        .route(format!("{}/v1/service",prefix).as_str(), post(create_bucket))
+        .route(format!("{}/v1/bucket",prefix).as_str(), post(create_bucket))
         .route(format!("{}/v2/bucket", prefix).as_str(), post(create_bucket))//Formalization
 
         //CREATE view requests

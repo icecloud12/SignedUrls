@@ -492,9 +492,9 @@ pub async fn save_files_to_directory(
                         .to_string();
                     let new_file_directory: PathBuf =
                         initial_path.join(format!("{}/", new_file_name));
-                    if !( fs::metadata(&new_file_directory).await.is_ok()
-                        && fs::metadata(&new_file_directory).await.expect("").is_dir()) {
-
+                    if !(fs::metadata(&new_file_directory).await.is_ok()
+                        && fs::metadata(&new_file_directory).await.expect("").is_dir())
+                    {
                         match std::fs::create_dir_all(&new_file_directory) {
                             Ok(_a) => {
                                 //do something on dir creation
@@ -560,7 +560,15 @@ pub async fn save_file_to_directory(
     };
 }
 
-pub fn replicate_hash(project_id: &String, file_id: Option<&String>, created: &u64, expiration: &u64, nonce: &u64, permission: &ActionTypes, signature: String)->bool {
+pub fn replicate_hash(
+    project_id: &String,
+    file_id: Option<&String>,
+    created: &u64,
+    expiration: &u64,
+    nonce: &u64,
+    permission: &ActionTypes,
+    signature: String,
+) -> bool {
     let replicated_hash = hash_parameters(
         project_id,
         created,
