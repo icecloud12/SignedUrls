@@ -15,14 +15,13 @@ use tokio_util::io::ReaderStream;
 use crate::{
     models::{file_models::FileDocument, signed_url_models::DeleteFileUsingApiKey},
     network::{db_connection::DATABASE, DbCollection},
-    project::actions::validate_api_key,
+    project::actions::validate_api_key_v2,
     signed_url::actions::ActionTypes,
 };
 use hyper::StatusCode;
 use serde_json::json;
 use signed_urls::collections;
 use tokio::fs::remove_file;
-
 
 pub async fn read_file(file_id: &String, db: &Database) -> (StatusCode, Option<axum::body::Body>) {
     let file_document_result = db
@@ -74,7 +73,6 @@ pub async fn read_file(file_id: &String, db: &Database) -> (StatusCode, Option<a
     }
 }
 
-
 pub async fn delete_file_using_api_key(
     Path(params): Path<Vec<(String, String)>>,
     Json(payload): Json<DeleteFileUsingApiKey>,
@@ -84,14 +82,11 @@ pub async fn delete_file_using_api_key(
         match ObjectId::from_str(file_id.1.clone().as_str()) {
             Ok(file_obj_id) => {
                 if payload.api_key.is_some() {
-                    match validate_api_key(&db, &payload.api_key.unwrap(), None, ActionTypes::DELETE_V1)
-                        .await
-                    {
+                    match validate_api_key_v2(&db, &payload.api_key.unwrap(), None).await {
                         Ok(project_o) => {
                             match project_o {
                                 Some(project_doc) => {
                                     let project_id = project_doc._id;
-
                                     let check_file_correct_project = db
                                         .collection::<FileDocument>(
                                             DbCollection::FILE.to_string().as_str(),

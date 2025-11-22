@@ -18,14 +18,13 @@ pub struct InsertBucketDocument<'a> {
     pub hashed_secret_key: &'a String,
     pub secret_key_hint: &'a String,
 }
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Debug)]
 pub struct BucketDocument {
     pub _id: ObjectId,
     pub name: String,
     pub public_key: String,
-    pub api_key: Option<String>,
-    pub hashed_secret_key: String,
-    pub secret_key_hint: String,
+    pub hashed_secret_key: Option<String>,
+    pub secret_key_hint: Option<String>,
 }
 
 #[derive(Serialize)]

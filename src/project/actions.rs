@@ -119,61 +119,60 @@ pub async fn create_bucket_directory(project_id: &String) {
     }
 }
 
-pub async fn validate_api_key(
+pub async fn validate_api_key_v1(
+    db: &Database,
+    api_key: &String,
+) -> Result<Option<ProjectDocument>, StatusCode> {
+    let project_result: Result<Option<ProjectDocument>, mongodb::error::Error> = db
+        .collection::<ProjectDocument>(DbCollection::PROJECT.to_string().as_str())
+        .find_one(
+            doc! {
+                signed_urls::collections::Bucket::API_KEY : api_key
+            },
+            None,
+        )
+        .await;
+    tracing::info!("{:#?}", project_result);
+    match project_result {
+        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+        Ok(project_option) => match project_option {
+            Some(project) => Ok(Some(project)),
+            None => Err(StatusCode::BAD_REQUEST),
+        },
+    }
+}
+pub async fn validate_api_key_v2(
     db: &Database,
     public_key: &String,
     secret_key: Option<String>,
-    action_version: ActionTypes,
 ) -> Result<Option<BucketDocument>, StatusCode> {
-    match action_version {
-        ActionTypes::UPLOAD_V1 | ActionTypes::VIEW_V1 | ActionTypes::DELETE_V1 => {
-            let project_result: Result<Option<BucketDocument>, mongodb::error::Error> = db
-                .collection::<BucketDocument>(DbCollection::PROJECT.to_string().as_str())
-                .find_one(
-                    doc! {
-                        signed_urls::collections::Bucket::API_KEY : public_key
-                    },
-                    None,
-                )
-                .await;
-            match project_result {
-                Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
-                Ok(project_option) => match project_option {
-                    Some(project) => Ok(Some(project)),
-                    None => Err(StatusCode::BAD_REQUEST),
-                },
-            }
-        }
-        ActionTypes::UPLOAD_V2 | ActionTypes::VIEW_V2 | ActionTypes::DELETE_V2 => {
-            let project_result: Result<Option<BucketDocument>, mongodb::error::Error> = db
-                .collection::<BucketDocument>(DbCollection::BUCKET.to_string().as_str())
-                .find_one(
-                    doc! {
-                        signed_urls::collections::Bucket::PUBLIC_KEY : public_key
-                    },
-                    None,
-                )
-                .await;
-            match project_result {
-                Ok(project_option) => match project_option {
-                    Some(project) => {
-                        let argon2_instance = Argon2::default();
-                        match PasswordHash::new(&project.hashed_secret_key) {
-                            Ok(password_hash) => {
-                                match argon2_instance
-                                    .verify_password(secret_key.unwrap().as_bytes(), &password_hash)
-                                {
-                                    Ok(_) => Ok(Some(project)),
-                                    Err(_) => Err(StatusCode::UNAUTHORIZED),
-                                }
-                            }
-                            Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+    let project_result: Result<Option<BucketDocument>, mongodb::error::Error> = db
+        .collection::<BucketDocument>(DbCollection::BUCKET.to_string().as_str())
+        .find_one(
+            doc! {
+                signed_urls::collections::Bucket::PUBLIC_KEY : public_key
+            },
+            None,
+        )
+        .await;
+    match project_result {
+        Ok(project_option) => match project_option {
+            Some(project) => {
+                let argon2_instance = Argon2::default();
+                match PasswordHash::new(&project.hashed_secret_key.to_owned().unwrap()) {
+                    Ok(password_hash) => {
+                        match argon2_instance
+                            .verify_password(secret_key.unwrap().as_bytes(), &password_hash)
+                        {
+                            Ok(_) => Ok(Some(project)),
+                            Err(_) => Err(StatusCode::UNAUTHORIZED),
                         }
                     }
-                    None => Err(StatusCode::BAD_REQUEST),
-                },
-                Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+                    Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+                }
             }
-        }
+            None => Err(StatusCode::BAD_REQUEST),
+        },
+        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
     }
 }
