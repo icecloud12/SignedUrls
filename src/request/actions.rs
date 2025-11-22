@@ -1,11 +1,11 @@
 use std::env;
 
-use crate::network::db_connection::DATABASE;
 use crate::models::{
+    file_models::FileDocument,
     project_models::BucketDocument,
     request_models::{CreateSignedUrlPostRequestV2, RequestOptions, UploadRequest},
-    file_models::FileDocument,
 };
+use crate::network::db_connection::DATABASE;
 use crate::network::DbCollection;
 use crate::signed_url::actions::{create_hashed_signature, ActionTypes};
 use axum::response::{IntoResponse, Response};
@@ -95,18 +95,19 @@ pub async fn create_upload_request(
         .to_string();
     let prefix = env::var("PREFIX").unwrap();
     let replaced_url = env::var("REPLACED_URL").unwrap();
-    let generated_url: String = format!(
-        "https://{}{}/v2/upload?r={}&c={}&e={}&n={}&s={}",
-        replaced_url,
-        prefix,
-        insert_request_id,
-        hashed_signature.date_created,
-        hashed_signature.expiration_date,
-        hashed_signature.nonce,
-        hashed_signature.hashed_signature_base_64
-    );
     match action_type {
         ActionTypes::UPLOAD_V1 => {
+            let generated_url: String = format!(
+                "https://{}{}/id/{}/permission/upload_v1/created/{}/expiration/{}/nonce/{}/signature/{}",
+                replaced_url,
+                prefix,
+                insert_request_id,
+                hashed_signature.date_created,
+                hashed_signature.expiration_date,
+                hashed_signature.nonce,
+                hashed_signature.hashed_signature_base_64
+            );
+
             return (
                 StatusCode::CREATED,
                 Json(json!(
@@ -119,6 +120,16 @@ pub async fn create_upload_request(
                 .into_response();
         }
         ActionTypes::UPLOAD_V2 => {
+            let generated_url: String = format!(
+                "https://{}{}/v2/upload?r={}&c={}&e={}&n={}&s={}",
+                replaced_url,
+                prefix,
+                insert_request_id,
+                hashed_signature.date_created,
+                hashed_signature.expiration_date,
+                hashed_signature.nonce,
+                hashed_signature.hashed_signature_base_64
+            );
             return (
                 StatusCode::CREATED,
                 Json(json!(
