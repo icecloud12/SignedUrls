@@ -1,19 +1,21 @@
-use std::str::FromStr;
-use mongodb::{bson::doc};
-use axum::{extract::{Path, Query}, response::IntoResponse};
+use axum::{
+    extract::{Path, Query},
+    response::IntoResponse,
+};
 use hyper::StatusCode;
+use mongodb::bson::doc;
 use mongodb::{bson::oid::ObjectId, Database};
 use signed_urls::collections;
+use std::str::FromStr;
 
 use crate::{
-    network::{db_connection::DATABASE, DbCollection},
     models::request_models::{RequestQueryParamsV2, ViewRequest},
+    network::{db_connection::DATABASE, DbCollection},
     signed_url::{
         actions::{validate_signed_url_v1, validate_signed_url_v2, ActionTypes},
-        handlers::read_file
-    }
+        handlers::read_file,
+    },
 };
-
 
 pub async fn process_signed_url_view_request_v1(
     Path(params): Path<Vec<(String, String)>>,
@@ -30,10 +32,7 @@ pub async fn process_signed_url_view_request_v1(
         let db: &Database = DATABASE.get().unwrap();
         let view_request_document_result = db
             .collection::<ViewRequest>(DbCollection::REQUEST.to_string().as_str())
-            .find_one(
-                doc! { collections::ViewFileRequest::REQUEST_ID: request_id},
-                None,
-            )
+            .find_one(doc! { collections::Request::ID : request_id}, None)
             .await
             .unwrap()
             .unwrap(); // we shouldn't technically touch the database directly so we can simply assume thigns would work out

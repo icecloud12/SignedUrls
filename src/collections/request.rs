@@ -10,8 +10,8 @@ pub enum Request {
     OPTIONS,
 }
 
-impl ToString for Request{
-    fn to_string(&self)->String{
+impl ToString for Request {
+    fn to_string(&self) -> String {
         match &self {
             Self::ID => "_id".to_string(),
             Self::PROJECT_ID => "project_id".to_string(),
@@ -19,7 +19,7 @@ impl ToString for Request{
             Self::EXPIRATION_DATE => "expiration_date".to_string(),
             Self::PERMISSION => "permission".to_string(),
             Self::FILES => "files".to_string(),
-            Self::OPTIONS => "options".to_string()
+            Self::OPTIONS => "options".to_string(),
         }
     }
 }

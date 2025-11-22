@@ -16,7 +16,6 @@ use crate::{
     models::{file_models::FileDocument, signed_url_models::DeleteFileUsingApiKey},
     network::{db_connection::DATABASE, DbCollection},
     project::actions::validate_api_key_v2,
-    signed_url::actions::ActionTypes,
 };
 use hyper::StatusCode;
 use serde_json::json;
