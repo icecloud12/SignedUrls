@@ -37,10 +37,7 @@ pub async fn read_file(file_id: &String, db: &Database) -> (StatusCode, Option<a
             Some(file_document) => {
                 let file_name_parts: Vec<&str> =
                     file_document.file_name.split(".").into_iter().collect();
-                let mut extension = "";
-                if file_name_parts.len() > 1 {
-                    extension = file_name_parts.last().unwrap();
-                }
+                let extension = file_name_parts.last().unwrap();
                 let file_id = file_document._id.to_hex();
                 let file_name = if file_name_parts.len() == 1 {
                     &file_id
