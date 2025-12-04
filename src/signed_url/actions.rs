@@ -520,6 +520,12 @@ pub async fn save_files_to_directory(
                     // let file_bytes = part.bytes().await.unwrap();
                     while let Some(streamed_chunk) = &part.chunk().await.unwrap() {
                         chunks.push(streamed_chunk.to_owned());
+                        if let Some(size_limit) = merge_options.size_limit {
+                            if chunks.len() > size_limit {
+                                tracing::error!("File limit exceeded");
+                                return Err(false);
+                            }
+                        }
                     }
 
                     let file_document_insert: FileDocumentInsertRow = FileDocumentInsertRow {
