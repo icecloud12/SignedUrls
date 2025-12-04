@@ -35,6 +35,8 @@ use tokio::{
     io::AsyncWriteExt,
 };
 pub enum ActionTypes {
+    CREATE_BUCKET_V1,
+    CREATE_BUCKET_V2,
     UPLOAD_V1,
     UPLOAD_V2,
     VIEW_V1,
@@ -49,6 +51,11 @@ pub enum UploadActionTypes {
 }
 #[derive(Copy, Clone)]
 pub enum ViewActionTypes {
+    V1,
+    V2,
+}
+
+pub enum CreateBucketActionTypes {
     V1,
     V2,
 }
@@ -73,6 +80,8 @@ impl ToString for ViewActionTypes {
 impl ToString for ActionTypes {
     fn to_string(&self) -> String {
         match &self {
+            &Self::CREATE_BUCKET_V1 => "create_bucket_v1".to_string(),
+            &Self::CREATE_BUCKET_V2 => "create_bucket_v2".to_string(),
             &Self::UPLOAD_V1 => "upload_v1".to_string(),
             &Self::UPLOAD_V2 => "upload_v2".to_string(),
             &Self::VIEW_V1 => "view_v1".to_string(),
