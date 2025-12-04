@@ -567,13 +567,31 @@ pub async fn save_files_to_directory(
                         match std::fs::create_dir_all(&new_file_directory) {
                             Ok(_a) => {
                                 //do something on dir creation
-                                let file_extention = original_file_name.split(".").last().unwrap();
-                                let new_file_path: String = new_file_directory
-                                    .clone()
-                                    .join(format!("{}.{}", new_file_name, file_extention))
-                                    .to_str()
-                                    .unwrap()
-                                    .to_string();
+                                let file_name_parts =
+                                    original_file_name.split(".").collect::<Vec<&str>>();
+                                let o_file_extension = if file_name_parts.len().gt(&1) {
+                                    Some(file_name_parts.last())
+                                } else {
+                                    None
+                                };
+                                let new_file_path = match o_file_extension {
+                                    None => new_file_directory
+                                        .clone()
+                                        .join(format!("{}", new_file_name))
+                                        .to_str()
+                                        .unwrap()
+                                        .to_string(),
+                                    Some(file_extension) => new_file_directory
+                                        .clone()
+                                        .join(format!(
+                                            "{}.{}",
+                                            new_file_name,
+                                            *file_extension.unwrap()
+                                        ))
+                                        .to_str()
+                                        .unwrap()
+                                        .to_string(),
+                                };
 
                                 let saved_file = save_file_to_directory(
                                     original_file_name,

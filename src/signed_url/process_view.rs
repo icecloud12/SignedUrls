@@ -55,6 +55,7 @@ pub async fn process_signed_url_view_request_v2(
     Path(params): Path<Vec<(String, String)>>,
     query: Query<RequestQueryParamsV2>,
 ) -> impl IntoResponse {
+    tracing::info!("proces_view_v2");
     let db: &Database = DATABASE.get().unwrap();
     if params.len() == 1 {
         let (_file_param_key, file_id) = params.get(0).unwrap();
@@ -63,6 +64,7 @@ pub async fn process_signed_url_view_request_v2(
             if status_code == StatusCode::OK {
                 return (status_code, body.unwrap()).into_response();
             } else {
+                tracing::warn!("{}", status_code);
                 return (status_code).into_response();
             }
         } else {

@@ -47,6 +47,7 @@ pub async fn read_file(file_id: &String, db: &Database) -> (StatusCode, Option<a
                 let file_path = PathBuf::from(file_document.path)
                     .join(&file_id)
                     .join(file_name);
+                tracing::info!("[file_path]{:#?}", file_path);
                 match tokio::fs::File::open(file_path).await {
                     Ok(file) => {
                         let stream = ReaderStream::new(file);
@@ -175,7 +176,6 @@ pub async fn delete_file_using_api_key(
             Err(_) => return (StatusCode::BAD_REQUEST).into_response(),
         }
     }
-
     return (
         StatusCode::BAD_REQUEST,
         Json(json!({"message":"Invalid reference for FileId"})),

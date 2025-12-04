@@ -80,6 +80,7 @@ pub async fn create_upload_request_v1(
 pub async fn create_upload_request_v2(
     Json(post_request): Json<CreateSignedUrlPostRequestV2>,
 ) -> impl IntoResponse {
+    tracing::info!("here");
     let CreateSignedUrlPostRequestV2 {
         duration,
         target,
