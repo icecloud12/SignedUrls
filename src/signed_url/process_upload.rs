@@ -95,7 +95,7 @@ pub async fn process_signed_url_upload_request_v2(
     multipart: Multipart,
 ) -> impl IntoResponse {
     let query = query.0;
-    let request_id = query.request.clone();
+    let request_id = query.request.clone().unwrap();
     tracing::info!("request_id:{:#?}", request_id);
     if validate_signed_url_v2(None, query, ActionTypes::UPLOAD_V2).await {
         let db: &Database = DATABASE.get().unwrap();
@@ -105,6 +105,11 @@ pub async fn process_signed_url_upload_request_v2(
                     "localField": signed_urls::collections::Request::PROJECT_ID,
                     "foreignField": signed_urls::collections::Bucket::ID,
                     "as": "bucket"
+                }
+            },
+            doc! {
+                "$match" : {
+                    "_id": ObjectId::from_str(&request_id).unwrap()
                 }
             },
             doc! { "$unwind": "$bucket" },
@@ -142,7 +147,7 @@ pub async fn process_signed_url_upload_request_v2(
                             .await;
                             match save_files_to_directory_result {
                                 Ok(res) => {
-                                    return (StatusCode::OK, Json(json!({"data":res})))
+                                    return (StatusCode::OK, Json(json!({"files":res.files})))
                                         .into_response();
                                 }
                                 Err(_) => {
