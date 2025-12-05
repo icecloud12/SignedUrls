@@ -60,6 +60,25 @@ impl From<RequestOptions> for MergeRequestOptions {
         }
     }
 }
+impl From<RequestDocumentOptions> for MergeRequestOptions {
+    fn from(value: RequestDocumentOptions) -> Self {
+        let DefaultRequestOptions {
+            is_consumable,
+            is_consumed,
+            is_public,
+            size_limit,
+            mime_types,
+        } = DefaultRequestOptions::default();
+        MergeRequestOptions {
+            is_consumable: value.is_consumable.unwrap_or_else(|| is_consumable),
+            is_consumed: value.is_consumed.unwrap_or_else(|| is_consumed),
+            is_public: value.is_public.unwrap_or_else(|| is_public),
+            size_limit,
+            mime_types,
+        }
+    }
+}
+
 impl Default for MergeRequestOptions {
     fn default() -> Self {
         let DefaultRequestOptions {
@@ -116,7 +135,7 @@ pub struct UploadRequestDocument {
     pub project_id: ObjectId,
     pub date_created: u64,
     pub expiration_date: u64,
-    pub options: RequestOptions,
+    pub options: Option<RequestOptions>,
     pub permission: String,
     pub target: Option<String>,
 }
@@ -246,8 +265,26 @@ pub struct RequestQueryParamsV2 {
 }
 #[derive(Serialize, Deserialize)]
 pub struct ViewFileRequestOptions {
-    pub is_consumable: bool,
-    pub is_consumed: bool,
+    pub is_consumable: Option<bool>,
+    pub is_consumed: Option<bool>,
+}
+impl From<ViewFileRequestOptions> for MergeRequestOptions {
+    fn from(value: ViewFileRequestOptions) -> Self {
+        let MergeRequestOptions {
+            is_consumable,
+            is_consumed,
+            is_public,
+            size_limit,
+            mime_types,
+        } = MergeRequestOptions::default();
+        MergeRequestOptions {
+            is_consumable: value.is_consumable.unwrap_or_else(|| is_consumable),
+            is_consumed: value.is_consumed.unwrap_or_else(|| is_consumed),
+            is_public,
+            size_limit,
+            mime_types,
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize)]
