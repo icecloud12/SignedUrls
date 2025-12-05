@@ -67,7 +67,7 @@ pub async fn process_signed_url_upload_request_v1(
             &request._id.to_hex(),
             &project._id.to_hex(),
             request.target,
-            Some(request.options),
+            request.options,
             multipart,
             UploadActionTypes::try_from(ActionTypes::UPLOAD_V1).unwrap(),
         )

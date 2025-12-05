@@ -224,7 +224,8 @@ pub async fn validate_signed_url_v1(params: Vec<String>, permission: &str) -> bo
                                 return true;
                             }
                             Some(options) => {
-                                if options.is_consumable.is_some() {
+                                let merged_options = MergeRequestOptions::from(options);
+                                if merged_options.is_consumable {
                                     let filter = doc! {"_id": entry._id};
                                     let update = doc! {
                                         "$set": { "options.is_consumed" : true }
@@ -349,7 +350,7 @@ pub async fn validate_signed_url_v2(
                                                                                                     return false;
                                                                                                 }
                                                                                                 Some(options) => {
-                                                                                                    let ViewFileRequestOptions{is_consumable, is_consumed} = options;
+                                                                                                    let MergeRequestOptions { is_consumable, is_consumed, ..} = MergeRequestOptions::from(options);
                                                                                                     if is_consumable {
                                                                                                         if is_consumed {
                                                                                                             return false;
@@ -437,20 +438,17 @@ pub async fn validate_signed_url_v2(
                                             &permission,
                                             signature,
                                         ) {
-                                            let RequestOptions {
-                                                is_consumable,
-                                                is_consumed,
-                                                ..
-                                            } = request_doc.options;
-                                            match (is_consumable, is_consumed) {
-                                                (Some(is_consumable), is_consumed) => {
-                                                    let is_consumed =
-                                                        is_consumed.unwrap_or_else(|| false);
+                                            match request_doc.options {
+                                                Some(request_options) => {
+                                                    let MergeRequestOptions {
+                                                        is_consumable,
+                                                        is_consumed,
+                                                        ..
+                                                    } = MergeRequestOptions::from(request_options);
                                                     if is_consumable {
                                                         if is_consumed {
-                                                            return true;
+                                                            return false;
                                                         } else {
-                                                            //consume it
                                                             let filter = doc! { signed_urls::collections::Bucket::ID.to_string().as_str(): request_doc._id};
                                                             let update = doc! { "$set": { "options.is_consumed": true }};
                                                             let _ =db.collection::<UploadRequestDocument>(DbCollection::REQUEST.to_string().as_str()).update_one(filter, update, None);
@@ -460,7 +458,7 @@ pub async fn validate_signed_url_v2(
                                                         return true;
                                                     }
                                                 }
-                                                (None, _) => {
+                                                None => {
                                                     return true;
                                                 }
                                             }

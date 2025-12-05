@@ -74,7 +74,12 @@ pub async fn create_upload_request(
         date_created: hashed_signature.date_created.clone(),
         expiration_date: hashed_signature.expiration_date.clone(),
         options: RequestOptions {
-            is_consumable,
+            is_consumable: {
+                match is_consumable {
+                    Some(consumable_value) => Some(consumable_value),
+                    None => Some(false),
+                }
+            },
             is_consumed: Some(false),
             is_public,
             size_limit,

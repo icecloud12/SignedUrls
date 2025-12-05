@@ -171,11 +171,11 @@ async fn create_view_request(
                                                     options: Some(ViewFileRequestOptions{
                                                         is_consumable: {
                                                             match is_consumable{
-                                                                Some(option_val) => {option_val},
-                                                                None => false
+                                                                Some(option_val) => Some(option_val),
+                                                                None => Some(false)
                                                             }
                                                         },
-                                                        is_consumed: false
+                                                        is_consumed: Some(false)
                                                     })
                                                 });
                                             }
