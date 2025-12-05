@@ -33,7 +33,7 @@ pub struct MergeRequestOptions {
 impl Default for DefaultRequestOptions {
     fn default() -> Self {
         DefaultRequestOptions {
-            is_consumable: true,
+            is_consumable: false,
             is_consumed: false,
             is_public: false,
             size_limit: None,
