@@ -417,7 +417,6 @@ pub async fn validate_signed_url_v2(
                         .as_secs();
                     if current_time >= created && current_time <= expiration {
                         let db: &Database = DATABASE.get().unwrap();
-                        tracing::info!("request_id: {}", request.as_str());
                         let object_id = ObjectId::from_str(request.as_str()).unwrap();
                         let find_result = db
                             .collection::<UploadRequestDocument>(

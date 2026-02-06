@@ -116,6 +116,7 @@ pub async fn create_upload_request_v2(
                         .await;
                     }
                     None => {
+                        tracing::error!("No matching bucket");
                         return (StatusCode::BAD_REQUEST).into_response();
                     }
                 },
