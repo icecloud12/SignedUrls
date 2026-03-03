@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::models::project_models::BucketDocument;
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, Default)]
 pub struct RequestOptions {
     pub is_consumable: Option<bool>,
     pub is_consumed: Option<bool>,
@@ -168,7 +168,7 @@ pub struct RequestDocumentOptions {
 }
 
 //accepts a duration in seconds and a vector of file_ids
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct CreateSignedUrlViewRequest {
     pub duration: Option<u64>,
     pub files: Option<Vec<String>>,

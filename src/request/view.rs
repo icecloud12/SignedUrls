@@ -7,12 +7,13 @@ use serde_json::json;
 use tokio_util::io::ReaderStream;
 
 use crate::{
-    models::{file_models::FileIdUrlPair, request_models::{CreateSignedUrlViewRequest, CreateSignedUrlViewRequestV1, CreateSignedUrlViewRequestV2, ViewFileRequest, ViewFileRequestOptions, ViewRequest}}, network::{db_connection::DATABASE, DbCollection}, project::actions::{validate_api_key_v1, validate_api_key_v2}, request::actions::file_reference_is_valid, signed_url::actions::{create_hashed_signature, ActionTypes, CreateHashedSignatureResult, ViewActionTypes}};
+    models::{file_models::FileIdUrlPair, request_models::{CreateSignedUrlViewRequest, CreateSignedUrlViewRequestV1, CreateSignedUrlViewRequestV2, RequestOptions, ViewFileRequest, ViewFileRequestOptions, ViewRequest}}, network::{DbCollection, db_connection::DATABASE}, project::actions::{validate_api_key_v1, validate_api_key_v2}, request::actions::file_reference_is_valid, signed_url::actions::{ActionTypes, CreateHashedSignatureResult, ViewActionTypes, create_hashed_signature}};
 
 async fn create_view_request(
     version: ViewActionTypes,
     post_request: CreateSignedUrlViewRequest,
 ) -> impl IntoResponse {
+    tracing::info!("payload {:#?}", post_request);
 
     let db: &Database = DATABASE.get().unwrap();
     let CreateSignedUrlViewRequest {
@@ -22,9 +23,18 @@ async fn create_view_request(
         secret_key,
         is_consumable
     } = post_request;
+    
     let public_key_o = public_key;
     let mut signatures = Vec::new();
     let file_id_collection = files.unwrap();
+    let request_options: Option<RequestOptions> = if is_consumable.is_some(){
+        Some(RequestOptions{
+            is_consumable,
+            ..Default::default()
+        })
+    }else{
+        None
+    };
     match public_key_o {
         Some(public_key) => {
             match version {
@@ -54,7 +64,7 @@ async fn create_view_request(
                                         expiration_date: t_sig.expiration_date,
                                         permission: version.to_string(),
                                         files: file_id_collection.clone(),
-                                        options: None,
+                                        options: request_options,
                                     };
                                     let insert_request_id = &db
                                         .collection::<ViewRequest>(DbCollection::REQUEST.to_string().as_str())
@@ -108,6 +118,7 @@ async fn create_view_request(
                                      return (StatusCode::BAD_REQUEST).into_response();
                                  }
                                  Some (bucket)=>{
+                                    tracing::info!("{:#?}", file_id_collection);
                                     file_id_collection
                                         .iter()
                                         .for_each(|file_id| {
@@ -133,7 +144,7 @@ async fn create_view_request(
                                         expiration_date: t_sig.expiration_date,
                                         permission: version.to_string(),
                                         files: file_id_collection.clone(),
-                                        options: None,
+                                        options: request_options,
                                     };
                                     let insert_request_id = &db
                                         .collection::<ViewRequest>(DbCollection::REQUEST.to_string().as_str())
