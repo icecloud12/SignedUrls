@@ -503,7 +503,8 @@ pub async fn save_files_to_directory(
     let mut initial_path: std::path::PathBuf =
         std::path::PathBuf::from("./data/").join(format!("{}/", project_id.clone()));
     if let Some(target) = target {
-        initial_path = initial_path.join(format!("{}/", target));
+        let clean_target = target.trim_matches('/').replace("..", "");
+        initial_path = initial_path.join(&clean_target);
     }
 
     let mut created_files: Vec<signed_url_models::File> = vec![];

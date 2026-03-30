@@ -13,9 +13,12 @@ use axum::{
 use tokio_util::io::ReaderStream;
 
 use crate::{
-    models::{file_models::FileDocument, signed_url_models::DeleteFileUsingApiKey},
+    models::{
+        file_models::FileDocument,
+        signed_url_models::{DeleteFileUsingApiKey, DeleteFileUsingApiKeyV2},
+    },
     network::{db_connection::DATABASE, DbCollection},
-    project::actions::validate_api_key_v2,
+    project::actions::{validate_api_key_v1, validate_api_key_v2},
 };
 use hyper::StatusCode;
 use serde_json::json;
@@ -70,7 +73,7 @@ pub async fn read_file(file_id: &String, db: &Database) -> (StatusCode, Option<a
     }
 }
 
-pub async fn delete_file_using_api_key(
+pub async fn delete_file_using_api_key_v1(
     Path(params): Path<Vec<(String, String)>>,
     Json(payload): Json<DeleteFileUsingApiKey>,
 ) -> impl IntoResponse {
@@ -79,7 +82,121 @@ pub async fn delete_file_using_api_key(
         match ObjectId::from_str(file_id.1.clone().as_str()) {
             Ok(file_obj_id) => {
                 if payload.api_key.is_some() {
-                    match validate_api_key_v2(&db, &payload.api_key.unwrap(), None).await {
+                    match validate_api_key_v1(&db, &payload.api_key.unwrap()).await {
+                        Ok(project_o) => {
+                            match project_o {
+                                Some(project_doc) => {
+                                    let project_id = project_doc._id;
+                                    let check_file_correct_project = db
+                                        .collection::<FileDocument>(
+                                            DbCollection::FILE.to_string().as_str(),
+                                        )
+                                        .find_one(
+                                            doc! {
+                                                collections::File::ID: file_obj_id,
+                                                collections::File::PROJECT_ID: project_id,
+                                            },
+                                            None,
+                                        )
+                                        .await
+                                        .unwrap();
+
+                                    match check_file_correct_project {
+                                        Some(file_doc) => {
+                                            //delete db row
+                                            let _ = db
+                                                .collection::<FileDocument>(
+                                                    DbCollection::FILE.to_string().as_str(),
+                                                )
+                                                .find_one_and_delete(
+                                                    doc! {
+                                                        "_id": file_doc._id
+                                                    },
+                                                    None,
+                                                )
+                                                .await;
+                                            let file_ext =
+                                                file_doc.file_name.split(".").last().unwrap();
+                                            let file_id: String = file_doc._id.to_hex();
+                                            let file_path = format!(
+                                                "{file_path}/{file_name}",
+                                                file_path = file_doc.path,
+                                                file_name = format!(
+                                                    "{}/{}.{}",
+                                                    &file_id, &file_id, file_ext
+                                                )
+                                            );
+                                            //delete file
+                                            let file_remove_result = remove_file(file_path).await;
+                                            match file_remove_result {
+                                                Ok(()) => {
+                                                    println!("File removed successfully");
+                                                    return (
+                                                        StatusCode::OK,
+                                                        Json(
+                                                            json!({"message": "Successfully removed file"}),
+                                                        ),
+                                                    )
+                                                        .into_response();
+                                                }
+                                                Err(err) => {
+                                                    println!(
+                                                        "{}",
+                                                        format!("Cannot remove file :{:#?}", &err)
+                                                    );
+                                                    return (StatusCode::BAD_REQUEST, Json(json!({"message": format!("Cannot remove file :{:#?}",&err)}))).into_response();
+                                                }
+                                            }
+                                        }
+                                        None => {
+                                            return (
+                                                StatusCode::BAD_REQUEST,
+                                                Json(json!({"message":"Parameter mismatch"})),
+                                            )
+                                                .into_response()
+                                        }
+                                    }
+                                }
+                                None => {
+                                    return (
+                                        StatusCode::BAD_REQUEST,
+                                        Json(json!({"message":"API key invalid"})),
+                                    )
+                                        .into_response();
+                                }
+                            }
+                        }
+                        Err(status_code) => return (status_code).into_response(),
+                    }
+                } else {
+                    return (
+                        StatusCode::UNAUTHORIZED,
+                        Json(json!({"message":"An unauthorized action"})),
+                    )
+                        .into_response();
+                }
+            }
+            Err(_) => return (StatusCode::BAD_REQUEST).into_response(),
+        }
+    }
+    return (
+        StatusCode::BAD_REQUEST,
+        Json(json!({"message":"Invalid reference for FileId"})),
+    )
+        .into_response();
+}
+pub async fn delete_file_using_api_key_v2(
+    Path(params): Path<Vec<(String, String)>>,
+    Json(payload): Json<DeleteFileUsingApiKeyV2>,
+) -> impl IntoResponse {
+    let db = DATABASE.get().unwrap();
+    if let Some(file_id) = params.get(0) {
+        match ObjectId::from_str(file_id.1.clone().as_str()) {
+            Ok(file_obj_id) => {
+                if payload.public_key.is_some() {
+                    match validate_api_key_v2(&db, &payload.public_key.unwrap(), payload.secret_key)
+                        .await
+                    {
                         Ok(project_o) => {
                             match project_o {
                                 Some(project_doc) => {

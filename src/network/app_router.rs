@@ -3,7 +3,7 @@ use axum::{extract::DefaultBodyLimit, routing::{delete, get, post}, Router};
 use crate::{
     project::handlers::create_bucket,
     request::{upload::{create_upload_request_v1, create_upload_request_v2}, view::{create_view_request_v1, create_view_request_v2, process_public_read_access}},
-    signed_url::{handlers::delete_file_using_api_key,
+    signed_url::{handlers::{ delete_file_using_api_key_v1, delete_file_using_api_key_v2},
     process_upload::{process_signed_url_upload_request_v1, process_signed_url_upload_request_v2},
     process_view::{process_signed_url_view_request_v1, process_signed_url_view_request_v2}}};
 
@@ -44,9 +44,9 @@ pub async fn router()->axum::Router {
         .route(format!("{}/preview/:file_id",prefix).as_str(), get(process_public_read_access))//Legal Alias
         .route(format!("{}/v1/preview/:file_id",prefix).as_str(), get(process_public_read_access))
 
-        .route(format!("{}/delete/:file_id", prefix).as_str(), delete(delete_file_using_api_key))//Legal Alias
-        .route(format!("{}/v1/delete/:file_id", prefix).as_str(), delete(delete_file_using_api_key))
-        .route(format!("{}/v2/delete/:file_id", prefix).as_str(), delete(delete_file_using_api_key))//Formalization
+        .route(format!("{}/delete/:file_id", prefix).as_str(), delete(delete_file_using_api_key_v1))//Legal Alias
+        .route(format!("{}/v1/delete/:file_id", prefix).as_str(), delete(delete_file_using_api_key_v1))
+        .route(format!("{}/v2/delete/:file_id", prefix).as_str(), delete(delete_file_using_api_key_v2))//Formalization
 		//no body limit
 		.layer(DefaultBodyLimit::disable());
     return router;
