@@ -13,6 +13,9 @@ pub struct FileDocument {
     pub project_id: ObjectId,
     pub request_id: ObjectId,
     pub options: FileDocumentOptions,
+    pub mime_type: Option<String>,
+    pub extension: Option<String>,
+    pub file_size: Option<usize>,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -22,6 +25,9 @@ pub struct FileDocumentInsertRow {
     pub project_id: ObjectId,
     pub request_id: ObjectId,
     pub options: FileDocumentOptions,
+    pub mime_type: Option<String>,
+    pub extension: Option<String>,
+    pub file_size: Option<usize>,
 }
 
 #[derive(Serialize)]
@@ -30,4 +36,10 @@ pub struct FileIdUrlPair {
     pub url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mime_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub extension: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file_size: Option<usize>,
 }

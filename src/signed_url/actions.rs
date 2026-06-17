@@ -525,8 +525,8 @@ pub async fn save_files_to_directory(
                     //file_name.to_string()
                     let original_file_name = file_name.to_string();
                     // let file_bytes = part.bytes().await.unwrap();
-                    while let Some(streamed_chunk) = &part.chunk().await.unwrap() {
-                        chunks.push(streamed_chunk.to_owned());
+                    while let Some(streamed_chunk) = part.chunk().await.unwrap() {
+                        chunks.push(streamed_chunk);
                         if let Some(size_limit) = merge_options.size_limit {
                             if chunks.len() > size_limit {
                                 tracing::error!("File limit exceeded");
@@ -534,7 +534,14 @@ pub async fn save_files_to_directory(
                             }
                         }
                     }
-
+                    let data_bytes: Vec<u8> =
+                        chunks.iter().flat_map(|b| b.iter().copied()).collect();
+                    let content_type = infer::get(&data_bytes)
+                        .map(|k| k.mime_type())
+                        .map(|s| s.to_string());
+                    let file_extension = infer::get(&data_bytes)
+                        .map(|k| k.extension())
+                        .map(|s| s.to_string());
                     let file_document_insert: FileDocumentInsertRow = FileDocumentInsertRow {
                         file_name: original_file_name.clone(),
                         path: initial_path.to_str().unwrap().to_string(),
@@ -543,6 +550,9 @@ pub async fn save_files_to_directory(
                         },
                         project_id: ObjectId::from_str(project_id.as_str()).unwrap(),
                         request_id: ObjectId::from_str(request_id.as_str()).unwrap(),
+                        mime_type: content_type,
+                        extension: file_extension,
+                        file_size: Some(chunks.len()),
                     };
                     let db: &Database = DATABASE.get().unwrap();
                     let insert_file_insert_result: InsertOneResult = db

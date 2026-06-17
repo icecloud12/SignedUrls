@@ -1,13 +1,13 @@
-use std::{env, str::FromStr};
+use std::{collections::HashMap, env, iter::Map, str::FromStr};
 
 use axum::{body::Body, extract::Path, response::IntoResponse, Json};
 use hyper::StatusCode;
-use mongodb::{bson::oid::ObjectId, Database};
+use mongodb::{Database, bson::{doc, oid::ObjectId}};
 use serde_json::json;
 use tokio_util::io::ReaderStream;
-
+use signed_urls::collections;
 use crate::{
-    models::{file_models::FileIdUrlPair, request_models::{CreateSignedUrlViewRequest, CreateSignedUrlViewRequestV1, CreateSignedUrlViewRequestV2, RequestOptions, ViewFileRequest, ViewFileRequestOptions, ViewRequest}}, network::{DbCollection, db_connection::DATABASE}, project::actions::{validate_api_key_v1, validate_api_key_v2}, request::actions::file_reference_is_valid, signed_url::actions::{ActionTypes, CreateHashedSignatureResult, ViewActionTypes, create_hashed_signature}};
+    models::{file_models::{FileDocument, FileIdUrlPair}, request_models::{CreateSignedUrlViewRequest, CreateSignedUrlViewRequestV1, CreateSignedUrlViewRequestV2, RequestOptions, ViewFileRequest, ViewFileRequestOptions, ViewRequest}}, network::{DbCollection, db_connection::DATABASE}, project::actions::{validate_api_key_v1, validate_api_key_v2}, request::actions::file_reference_is_valid, signed_url::actions::{ActionTypes, CreateHashedSignatureResult, ViewActionTypes, create_hashed_signature}};
 
 async fn create_view_request(
     version: ViewActionTypes,
@@ -119,8 +119,16 @@ async fn create_view_request(
                                  }
                                  Some (bucket)=>{
                                     tracing::info!("{:#?}", file_id_collection);
-                                    file_id_collection
-                                        .iter()
+                                    let file_references_result = get_file_references(&db, &file_id_collection).await;
+
+                                    let mut file_reference_map;
+                                    match file_references_result {
+                                        Err(e) => {return e.into_response();}
+                                        Ok(map) => {file_reference_map=  map;}
+                                    };
+                                    let valid_ids:Vec<String> =file_reference_map.keys().cloned().collect(); 
+                                    
+                                        valid_ids.iter()
                                         .for_each(|file_id| {
                                             let created_hashed_signature: CreateHashedSignatureResult =
                                                 create_hashed_signature(
@@ -137,13 +145,16 @@ async fn create_view_request(
                                                 );
                                             signatures.push(created_hashed_signature);
                                     });
+
+
                                     let t_sig = signatures.get(0).unwrap();
+
                                     let doc = ViewRequest {
                                         project_id: bucket._id,
                                         date_created: t_sig.date_created,
                                         expiration_date: t_sig.expiration_date,
                                         permission: version.to_string(),
-                                        files: file_id_collection.clone(),
+                                        files: valid_ids.clone(),
                                         options: request_options,
                                     };
                                     let insert_request_id = &db
@@ -156,14 +167,17 @@ async fn create_view_request(
                                         .unwrap();
                                     let prefix = env::var("PREFIX").unwrap();
                                     let replaced_url = env::var("REPLACED_URL").unwrap();
+                                    
 
                 let mut file_url_pairs: Vec<FileIdUrlPair> = Vec::new();
                                     let mut view_file_requests: Vec<ViewFileRequest> = Vec::new();
                                     signatures.iter().enumerate().for_each(|(index, signature)| {
-                                        let file_id = file_id_collection.get(index).unwrap();
+                                        let file_id = valid_ids.get(index).unwrap();
                                         let file_object_id = ObjectId::from_str(&file_id);
+                                        let file = file_reference_map.remove(file_id).unwrap();
                                         match file_object_id {
                                             Ok(file_object_id)=>{
+                                                
                                                 file_url_pairs.push(FileIdUrlPair {
                                                     id: file_id_collection.get(index).unwrap().to_string(),
                                                     url:  Some(format!("https://{origin}{prefix}/v2/file/{file_id}?r={insert_request_id}&c={date_created}&e={expiration}&n={nonce}&s={signature}",
@@ -173,7 +187,10 @@ async fn create_view_request(
                                                         expiration = signature.expiration_date,
                                                         nonce = signature.nonce,
                                                         signature = signature.hashed_signature_base_64).to_string()),
-                                                    error: None
+                                                    error: None,
+                                                    mime_type: file.mime_type.clone(),
+                                                    extension: file.extension.clone(),
+                                                    file_size: file.file_size
                                                 });
                         
                                                 view_file_requests.push(ViewFileRequest {
@@ -195,7 +212,10 @@ async fn create_view_request(
                                                 file_url_pairs.push(FileIdUrlPair {
                                                     id: file_id_collection.get(index).unwrap().to_string(),
                                                     url: None,
-                                                    error: Some(String::from("Invalid file reference format"))
+                                                    error: Some(String::from("Invalid file reference format")),
+                                                    mime_type: None,
+                                                    extension: None,
+                                                    file_size: None
                                                 });
                                             }
                                         }
@@ -289,4 +309,45 @@ pub async fn process_public_read_access(
             Err(response) => return Err(response),
         }
     }
+}
+
+
+async fn get_file_references(db: &Database, file_id_collections: &Vec<String>)
+-> Result<HashMap<String, FileDocument>, (StatusCode, String)>
+{
+    let mut id_collections = Vec::<ObjectId>::new();
+        file_id_collections.iter().for_each(|item| {
+        if let Ok(obj) = ObjectId::from_str(item.as_str()) {
+            id_collections.push(obj);
+        }
+    });
+    let mut mapped_file_reference: HashMap<String, FileDocument> = HashMap::new();
+    let mut cursor = db.collection::<FileDocument>(DbCollection::FILE.to_string().as_str()).find(doc!{
+        collections::File::ID : { "$in": id_collections}
+    }, None).await.map_err(|e| {
+        let msg = String::from("Something went wrong when trying to get file references");
+            tracing::error!(msg);
+            tracing::error!("{}", e);
+            (StatusCode::INTERNAL_SERVER_ERROR, msg)
+        })?;
+
+        while cursor.advance().await.map_err(|e| {
+            let msg = "Something went wrong when trying to get file reference".to_string();
+            tracing::error!(msg);
+            tracing::error!("{:#?}",e);
+            (StatusCode::INTERNAL_SERVER_ERROR, msg)
+        })? {
+            match cursor.deserialize_current() {
+                Ok(document) => {
+                    mapped_file_reference.insert(document._id.to_hex(), document);
+                }
+                Err(e) => {
+                    let msg = String::from("Something went wrong when trying to deserialize document");
+                    tracing::error!("{}",msg);
+                    tracing::error!("{:#?}", e);
+                    return Err((StatusCode::INTERNAL_SERVER_ERROR, msg));
+                }
+            }
+        }
+        Ok(mapped_file_reference)
 }
