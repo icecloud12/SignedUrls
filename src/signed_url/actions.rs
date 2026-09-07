@@ -525,10 +525,12 @@ pub async fn save_files_to_directory(
                     //file_name.to_string()
                     let original_file_name = file_name.to_string();
                     // let file_bytes = part.bytes().await.unwrap();
+                    let mut total_size: usize = 0;
                     while let Some(streamed_chunk) = part.chunk().await.unwrap() {
+                        total_size += streamed_chunk.len();
                         chunks.push(streamed_chunk);
                         if let Some(size_limit) = merge_options.size_limit {
-                            if chunks.len() > size_limit {
+                            if total_size > size_limit {
                                 tracing::error!("File limit exceeded");
                                 return Err(false);
                             }
@@ -559,7 +561,7 @@ pub async fn save_files_to_directory(
                         request_id: ObjectId::from_str(request_id.as_str()).unwrap(),
                         mime_type: content_type,
                         extension: file_extension,
-                        file_size: Some(chunks.len()),
+                        file_size: Some(total_size),
                     };
                     let db: &Database = DATABASE.get().unwrap();
                     let insert_file_insert_result: InsertOneResult = db
