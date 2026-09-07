@@ -179,7 +179,7 @@ async fn create_view_request(
                                             Ok(file_object_id)=>{
                                                 
                                                 file_url_pairs.push(FileIdUrlPair {
-                                                    id: file_id_collection.get(index).unwrap().to_string(),
+                                                    id: file_id.to_owned(),
                                                     url:  Some(format!("https://{origin}{prefix}/v2/file/{file_id}?r={insert_request_id}&c={date_created}&e={expiration}&n={nonce}&s={signature}",
                                                         origin = replaced_url ,
                                                         file_id= file_id,
@@ -190,7 +190,8 @@ async fn create_view_request(
                                                     error: None,
                                                     mime_type: file.mime_type.clone(),
                                                     extension: file.extension.clone(),
-                                                    file_size: file.file_size
+                                                    file_size: file.file_size,
+                                                    file_name: Some(file.file_name),
                                                 });
                         
                                                 view_file_requests.push(ViewFileRequest {
@@ -210,12 +211,13 @@ async fn create_view_request(
                                             Err(_)=>{
 
                                                 file_url_pairs.push(FileIdUrlPair {
-                                                    id: file_id_collection.get(index).unwrap().to_string(),
+                                                    id: file_id.to_owned(),
                                                     url: None,
                                                     error: Some(String::from("Invalid file reference format")),
                                                     mime_type: None,
                                                     extension: None,
-                                                    file_size: None
+                                                    file_size: None,
+                                                    file_name: None
                                                 });
                                             }
                                         }

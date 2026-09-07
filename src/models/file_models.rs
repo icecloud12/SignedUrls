@@ -35,6 +35,8 @@ pub struct FileIdUrlPair {
     pub id: String,
     pub url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub file_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mime_type: Option<String>,
