@@ -536,12 +536,19 @@ pub async fn save_files_to_directory(
                     }
                     let data_bytes: Vec<u8> =
                         chunks.iter().flat_map(|b| b.iter().copied()).collect();
-                    let content_type = infer::get(&data_bytes)
-                        .map(|k| k.mime_type())
-                        .map(|s| s.to_string());
-                    let file_extension = infer::get(&data_bytes)
-                        .map(|k| k.extension())
-                        .map(|s| s.to_string());
+                    let sniffed = infer::get(&data_bytes);
+                    let guessed_from_name = mime_guess::from_path(&original_file_name).first();
+                    let content_type = sniffed
+                        .map(|k| k.mime_type().to_string())
+                        .or_else(|| guessed_from_name.as_ref().map(|m| m.to_string()));
+                    let file_extension = sniffed
+                        .map(|k| k.extension().to_string())
+                        .or_else(|| {
+                            std::path::Path::new(&original_file_name)
+                                .extension()
+                                .and_then(|ext| ext.to_str())
+                                .map(|ext| ext.to_string())
+                        });
                     let file_document_insert: FileDocumentInsertRow = FileDocumentInsertRow {
                         file_name: original_file_name.clone(),
                         path: initial_path.to_str().unwrap().to_string(),
