@@ -10,7 +10,7 @@ use crate::{
         },
         signed_url_models::{self, File, SaveFilesToDirectoryResult},
     },
-    network::{db_connection::DATABASE, DbCollection},
+    network::DbCollection,
     request::actions::file_reference_is_valid,
 };
 use axum::{body::Bytes, extract::Multipart};
@@ -172,7 +172,7 @@ pub fn hash_parameters(
     return hashed_signature_base_64;
 }
 
-pub async fn validate_signed_url_v1(params: Vec<String>, permission: &str) -> bool {
+pub async fn validate_signed_url_v1(db: &Database, params: Vec<String>, permission: &str) -> bool {
     let (request_id, created, expiration, nonce, signature) = (
         params[0].to_owned(),
         params[1].to_owned(),
@@ -192,8 +192,7 @@ pub async fn validate_signed_url_v1(params: Vec<String>, permission: &str) -> bo
         if current_time >= created_time.unwrap() && current_time <= expiration_time.unwrap() {
             tracing::info!("not time expired");
             //fetch project_id from request id
-            let db: &Database = DATABASE.get().unwrap();
-            let request_entry = db
+                        let request_entry = db
                 .collection::<RequestDocument>(DbCollection::REQUEST.to_string().as_str())
                 .find_one(doc! {"_id":ObjectId::from_str(&request_id).unwrap()}, None)
                 .await;
@@ -258,6 +257,7 @@ pub async fn validate_signed_url_v1(params: Vec<String>, permission: &str) -> bo
     return false;
 }
 pub async fn validate_signed_url_v2(
+    db: &Database,
     file_id: Option<&String>,
     query: RequestQueryParamsV2,
     permission: ActionTypes,
@@ -280,7 +280,7 @@ pub async fn validate_signed_url_v2(
                 match ObjectId::from_str(&file_id) {
                     Ok(file_object_id) => {
                         //valid objectid syntax
-                        match file_reference_is_valid(file_object_id).await {
+                        match file_reference_is_valid(db, file_object_id).await {
                             Ok(file) => {
                                 //skip checking hash if file is public
                                 if file.options.is_public {
@@ -310,8 +310,7 @@ pub async fn validate_signed_url_v2(
                                                     &permission,
                                                     signature,
                                                 ) {
-                                                    let db = DATABASE.get().unwrap();
-                                                    //get request record
+                                                                                                        //get request record
                                                     let request_object_id =
                                                         ObjectId::from_str(&request_id).unwrap();
                                                     let request_record = db
@@ -416,8 +415,7 @@ pub async fn validate_signed_url_v2(
                         .unwrap()
                         .as_secs();
                     if current_time >= created && current_time <= expiration {
-                        let db: &Database = DATABASE.get().unwrap();
-                        let object_id = ObjectId::from_str(request.as_str()).unwrap();
+                                                let object_id = ObjectId::from_str(request.as_str()).unwrap();
                         let find_result = db
                             .collection::<UploadRequestDocument>(
                                 DbCollection::REQUEST.to_string().as_str(),
@@ -448,7 +446,7 @@ pub async fn validate_signed_url_v2(
                                                         if is_consumed {
                                                             return false;
                                                         } else {
-                                                            let filter = doc! { signed_urls::collections::Bucket::ID.to_string().as_str(): request_doc._id};
+                                                            let filter = doc! { crate::collections::Bucket::ID.to_string().as_str(): request_doc._id};
                                                             let update = doc! { "$set": { "options.is_consumed": true }};
                                                             let _ =db.collection::<UploadRequestDocument>(DbCollection::REQUEST.to_string().as_str()).update_one(filter, update, None);
                                                             return true;
@@ -493,6 +491,7 @@ pub async fn validate_signed_url_v2(
 }
 
 pub async fn save_files_to_directory(
+    db: &Database,
     request_id: &String,
     project_id: &String,
     target: Option<String>,
@@ -563,8 +562,7 @@ pub async fn save_files_to_directory(
                         extension: file_extension,
                         file_size: Some(total_size),
                     };
-                    let db: &Database = DATABASE.get().unwrap();
-                    let insert_file_insert_result: InsertOneResult = db
+                                        let insert_file_insert_result: InsertOneResult = db
                         .collection::<FileDocumentInsertRow>(
                             DbCollection::FILE.to_string().as_str(),
                         )

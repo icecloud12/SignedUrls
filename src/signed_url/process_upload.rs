@@ -5,14 +5,15 @@ use crate::{
     models::request_models::{
         RequestQueryParamsV2, UploadRequestDocument, UploadRequestWithBucketDocument,
     },
-    network::{db_connection::DATABASE, DbCollection},
+    network::DbCollection,
+    state::AppState,
     signed_url::actions::{
         save_files_to_directory, validate_signed_url_v1, validate_signed_url_v2, ActionTypes,
         UploadActionTypes,
     },
 };
 use axum::{
-    extract::{Multipart, Path, Query},
+    extract::{Multipart, Path, Query, State},
     response::IntoResponse,
     Json,
 };
@@ -24,6 +25,7 @@ use mongodb::{
 use serde_json::json;
 
 pub async fn process_signed_url_upload_request_v1(
+    State(state): State<AppState>,
     Path(params): Path<Vec<(String, String)>>,
     multipart: Multipart,
 ) -> impl IntoResponse {
@@ -34,13 +36,14 @@ pub async fn process_signed_url_upload_request_v1(
         .collect::<Vec<String>>();
     let request_id: String = collected_params[0].clone();
 
+    let db: &Database = &state.db;
     if validate_signed_url_v1(
+        db,
         collected_params,
         ActionTypes::UPLOAD_V1.to_string().as_str(),
     )
     .await
     {
-        let db: &Database = DATABASE.get().unwrap();
         let request = db
             .collection::<UploadRequestDocument>(DbCollection::REQUEST.to_string().as_str())
             .find_one(
@@ -64,6 +67,7 @@ pub async fn process_signed_url_upload_request_v1(
             .unwrap()
             .unwrap();
         let save_files_to_directory_result = save_files_to_directory(
+            db,
             &request._id.to_hex(),
             &project._id.to_hex(),
             request.target,
@@ -91,19 +95,20 @@ pub async fn process_signed_url_upload_request_v1(
 }
 
 pub async fn process_signed_url_upload_request_v2(
+    State(state): State<AppState>,
     query: Query<RequestQueryParamsV2>,
     multipart: Multipart,
 ) -> impl IntoResponse {
     let query = query.0;
     let request_id = query.request.clone().unwrap();
     tracing::info!("request_id:{:#?}", request_id);
-    if validate_signed_url_v2(None, query, ActionTypes::UPLOAD_V2).await {
-        let db: &Database = DATABASE.get().unwrap();
+    let db: &Database = &state.db;
+    if validate_signed_url_v2(db, None, query, ActionTypes::UPLOAD_V2).await {
         let aggregate_pipeline = vec![
             doc! { "$lookup": {
                     "from": DbCollection::BUCKET,
-                    "localField": signed_urls::collections::Request::PROJECT_ID,
-                    "foreignField": signed_urls::collections::Bucket::ID,
+                    "localField": crate::collections::Request::PROJECT_ID,
+                    "foreignField": crate::collections::Bucket::ID,
                     "as": "bucket"
                 }
             },
@@ -137,6 +142,7 @@ pub async fn process_signed_url_upload_request_v2(
                             } = document;
 
                             let save_files_to_directory_result = save_files_to_directory(
+            db,
                                 &request_id.to_hex(),
                                 &bucket_id.to_hex(),
                                 target,

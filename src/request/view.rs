@@ -1,21 +1,22 @@
-use std::{collections::HashMap, env, iter::Map, str::FromStr};
+use std::{collections::HashMap, str::FromStr};
 
-use axum::{body::Body, extract::Path, response::IntoResponse, Json};
+use axum::{body::Body, extract::{Path, State}, response::IntoResponse, Json};
 use hyper::StatusCode;
 use mongodb::{Database, bson::{doc, oid::ObjectId}};
 use serde_json::json;
 use tokio_util::io::ReaderStream;
-use signed_urls::collections;
+use crate::collections;
 use crate::{
-    models::{file_models::{FileDocument, FileIdUrlPair}, request_models::{CreateSignedUrlViewRequest, CreateSignedUrlViewRequestV1, CreateSignedUrlViewRequestV2, RequestOptions, ViewFileRequest, ViewFileRequestOptions, ViewRequest}}, network::{DbCollection, db_connection::DATABASE}, project::actions::{validate_api_key_v1, validate_api_key_v2}, request::actions::file_reference_is_valid, signed_url::actions::{ActionTypes, CreateHashedSignatureResult, ViewActionTypes, create_hashed_signature}};
+    models::{file_models::{FileDocument, FileIdUrlPair}, request_models::{CreateSignedUrlViewRequest, CreateSignedUrlViewRequestV1, CreateSignedUrlViewRequestV2, RequestOptions, ViewFileRequest, ViewFileRequestOptions, ViewRequest}}, network::DbCollection, state::AppState, project::actions::{validate_api_key_v1, validate_api_key_v2}, request::actions::file_reference_is_valid, signed_url::actions::{ActionTypes, CreateHashedSignatureResult, ViewActionTypes, create_hashed_signature}};
 
 async fn create_view_request(
+    state: &AppState,
     version: ViewActionTypes,
     post_request: CreateSignedUrlViewRequest,
 ) -> impl IntoResponse {
     tracing::info!("payload {:#?}", post_request);
 
-    let db: &Database = DATABASE.get().unwrap();
+    let db: &Database = &state.db;
     let CreateSignedUrlViewRequest {
         duration,
         files,
@@ -46,13 +47,7 @@ async fn create_view_request(
                                     let created_hashed_signature: CreateHashedSignatureResult =
                                         create_hashed_signature(
                                             &project._id.to_hex(),
-                                            &duration.unwrap_or_else(|| {
-                                                std::env::var("DEFAULT_DURATION_AS_SECONDS")
-                                                    .unwrap()
-                                                    .to_string()
-                                                    .parse::<u64>()
-                                                    .unwrap()
-                                            }),
+                                            &duration.unwrap_or(state.config.default_duration_secs),
                                             &version.to_string(),
                                             None
                                         );
@@ -74,8 +69,8 @@ async fn create_view_request(
                                         .inserted_id
                                         .as_object_id()
                                         .unwrap();
-                                    let prefix = env::var("PREFIX").unwrap();
-                                    let replaced_url = env::var("REPLACED_URL").unwrap();
+                                    let prefix = &state.config.prefix;
+                                    let replaced_url = &state.config.replaced_url;
                                     let signature = signatures.get(0).unwrap();
                                     let generated_url:String = format!("https://{}{}/id/{}/permission/{}/created/{}/expiration/{}/nonce/{}/signature/{}/file/",
                                         replaced_url,
@@ -133,13 +128,7 @@ async fn create_view_request(
                                             let created_hashed_signature: CreateHashedSignatureResult =
                                                 create_hashed_signature(
                                                     &bucket._id.to_hex(),
-                                                    &duration.unwrap_or_else(|| {
-                                                        std::env::var("DEFAULT_DURATION_AS_SECONDS")
-                                                            .unwrap()
-                                                            .to_string()
-                                                            .parse::<u64>()
-                                                            .unwrap()
-                                                    }),
+                                                    &duration.unwrap_or(state.config.default_duration_secs),
                                                     &version.to_string(),
                                                     Some(file_id)
                                                 );
@@ -165,8 +154,8 @@ async fn create_view_request(
                                         .inserted_id
                                         .as_object_id()
                                         .unwrap();
-                                    let prefix = env::var("PREFIX").unwrap();
-                                    let replaced_url = env::var("REPLACED_URL").unwrap();
+                                    let prefix = &state.config.prefix;
+                                    let replaced_url = &state.config.replaced_url;
                                     
 
                 let mut file_url_pairs: Vec<FileIdUrlPair> = Vec::new();
@@ -248,26 +237,29 @@ async fn create_view_request(
     }
 }
 pub async fn create_view_request_v1(
+    State(state): State<AppState>,
     Json(post_request): Json<CreateSignedUrlViewRequestV1>,
 ) -> impl IntoResponse {
     match CreateSignedUrlViewRequest::try_from(post_request){
         Ok(request) => {
-            return create_view_request(ActionTypes::VIEW_V1.try_into().unwrap(), request).await.into_response();
+            return create_view_request(&state, ActionTypes::VIEW_V1.try_into().unwrap(), request).await.into_response();
         }
         Err(e)=>{ return (e).into_response(); }
     }
 }
 pub async fn create_view_request_v2(
+    State(state): State<AppState>,
     Json(post_request): Json<CreateSignedUrlViewRequestV2>,
 ) -> impl IntoResponse {
     match CreateSignedUrlViewRequestV2::try_into(post_request){
         Ok(request) =>{
-            return create_view_request(ActionTypes::VIEW_V2.try_into().unwrap(), request).await.into_response();
+            return create_view_request(&state, ActionTypes::VIEW_V2.try_into().unwrap(), request).await.into_response();
         }
         Err(e)=>{ return (e).into_response(); }
     }
 }
 pub async fn process_public_read_access(
+    State(state): State<AppState>,
     Path(params): Path<Vec<(String, String)>>,
 ) -> impl IntoResponse {
     let file_id = params[0].1.clone();
@@ -279,7 +271,7 @@ pub async fn process_public_read_access(
             format!("Internal server error"),
         ));
     } else {
-        match file_reference_is_valid(file_object_id.unwrap()).await {
+        match file_reference_is_valid(&state.db, file_object_id.unwrap()).await {
             Ok(file_document) => {
                 if file_document.options.is_public {
                     let initial_path = std::path::PathBuf::from(file_document.path.clone());

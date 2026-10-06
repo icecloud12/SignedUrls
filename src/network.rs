@@ -1,11 +1,7 @@
-use mongodb::{bson::Bson, Database};
+use mongodb::bson::Bson;
 
 pub mod app_router;
 pub mod db_connection;
-
-pub async fn connect() -> Database {
-    return db_connection::connect().await;
-}
 
 pub enum DbCollection {
     BUCKET,

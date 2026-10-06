@@ -1,16 +1,17 @@
 use axum::{
-    extract::{Path, Query},
+    extract::{Path, Query, State},
     response::IntoResponse,
 };
 use hyper::StatusCode;
 use mongodb::bson::doc;
 use mongodb::{bson::oid::ObjectId, Database};
-use signed_urls::collections;
+use crate::collections;
 use std::str::FromStr;
 
 use crate::{
     models::request_models::{RequestQueryParamsV2, ViewRequest},
-    network::{db_connection::DATABASE, DbCollection},
+    network::DbCollection,
+    state::AppState,
     signed_url::{
         actions::{validate_signed_url_v1, validate_signed_url_v2, ActionTypes},
         handlers::read_file,
@@ -18,18 +19,19 @@ use crate::{
 };
 
 pub async fn process_signed_url_view_request_v1(
+    State(state): State<AppState>,
     Path(params): Path<Vec<(String, String)>>,
 ) -> impl IntoResponse {
     let collected_params: Vec<String> = params
         .iter()
         .map(|param| param.1.clone())
         .collect::<Vec<String>>();
+    let db: &Database = &state.db;
     let request_id: ObjectId = ObjectId::from_str(collected_params[0].as_str()).unwrap();
     let file_id = collected_params[5].clone();
     //[request_id, created, expiration, nonce, signature, file] -- tho only signature is used in valdiating signed URL
-    if validate_signed_url_v1(collected_params, ActionTypes::VIEW_V1.to_string().as_str()).await {
+    if validate_signed_url_v1(db, collected_params, ActionTypes::VIEW_V1.to_string().as_str()).await {
         //if validated check if request view document has file
-        let db: &Database = DATABASE.get().unwrap();
         let view_request_document_result = db
             .collection::<ViewRequest>(DbCollection::REQUEST.to_string().as_str())
             .find_one(doc! { collections::Request::ID : request_id}, None)
@@ -52,14 +54,15 @@ pub async fn process_signed_url_view_request_v1(
     }
 }
 pub async fn process_signed_url_view_request_v2(
+    State(state): State<AppState>,
     Path(params): Path<Vec<(String, String)>>,
     query: Query<RequestQueryParamsV2>,
 ) -> impl IntoResponse {
     tracing::info!("proces_view_v2");
-    let db: &Database = DATABASE.get().unwrap();
+    let db: &Database = &state.db;
     if params.len() == 1 {
         let (_file_param_key, file_id) = params.get(0).unwrap();
-        if validate_signed_url_v2(Some(file_id), query.0, ActionTypes::VIEW_V2).await {
+        if validate_signed_url_v2(db, Some(file_id), query.0, ActionTypes::VIEW_V2).await {
             let (status_code, body) = read_file(file_id, db).await;
             if status_code == StatusCode::OK {
                 return (status_code, body.unwrap()).into_response();

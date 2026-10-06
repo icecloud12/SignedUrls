@@ -1,14 +1,14 @@
-use std::env;
 use axum::{extract::DefaultBodyLimit, routing::{delete, get, post}, Router};
 use crate::{
+    state::AppState,
     project::handlers::create_bucket,
     request::{upload::{create_upload_request_v1, create_upload_request_v2}, view::{create_view_request_v1, create_view_request_v2, process_public_read_access}},
     signed_url::{handlers::{ delete_file_using_api_key_v1, delete_file_using_api_key_v2},
     process_upload::{process_signed_url_upload_request_v1, process_signed_url_upload_request_v2},
     process_view::{process_signed_url_view_request_v1, process_signed_url_view_request_v2}}};
 
-pub async fn router()->axum::Router {
-    let prefix = env::var("PREFIX").unwrap();
+pub fn router(state: AppState) -> axum::Router {
+    let prefix = state.config.prefix.clone();
 
     let router = Router::new()
         //create the API_Key
@@ -48,7 +48,8 @@ pub async fn router()->axum::Router {
         .route(format!("{}/v1/delete/:file_id", prefix).as_str(), delete(delete_file_using_api_key_v1))
         .route(format!("{}/v2/delete/:file_id", prefix).as_str(), delete(delete_file_using_api_key_v2))//Formalization
 		//no body limit
-		.layer(DefaultBodyLimit::disable());
+		.layer(DefaultBodyLimit::disable())
+        .with_state(state);
     return router;
 
 }

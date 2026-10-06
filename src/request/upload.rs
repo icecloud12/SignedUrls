@@ -3,15 +3,16 @@ use crate::{
         project_models::BucketDocument,
         request_models::{CreateSignedUrlPostRequestV1, CreateSignedUrlPostRequestV2},
     },
-    network::db_connection::DATABASE,
+    state::AppState,
     project::actions::{validate_api_key_v1, validate_api_key_v2},
     signed_url::actions::ActionTypes,
 };
-use axum::{response::IntoResponse, Json};
+use axum::{extract::State, response::IntoResponse, Json};
 use hyper::StatusCode;
 use serde_json::json;
 
 pub async fn create_upload_request_v1(
+    State(state): State<AppState>,
     Json(post_request): Json<CreateSignedUrlPostRequestV1>,
 ) -> impl IntoResponse {
     let CreateSignedUrlPostRequestV1 {
@@ -22,7 +23,7 @@ pub async fn create_upload_request_v1(
         api_key,
     } = post_request;
     if api_key.is_some() {
-        let db = DATABASE.get().unwrap();
+        let db = &state.db;
         let api_key = api_key.unwrap();
         match validate_api_key_v1(&db, &api_key).await {
             Ok(project_o) => match project_o {
@@ -46,6 +47,7 @@ pub async fn create_upload_request_v1(
                     };
                     return crate::request::actions::create_upload_request(
                         &db,
+                        &state.config,
                         bucket,
                         upload_request_v2,
                         ActionTypes::UPLOAD_V1,
@@ -78,6 +80,7 @@ pub async fn create_upload_request_v1(
 }
 
 pub async fn create_upload_request_v2(
+    State(state): State<AppState>,
     Json(post_request): Json<CreateSignedUrlPostRequestV2>,
 ) -> impl IntoResponse {
     let CreateSignedUrlPostRequestV2 {
@@ -90,7 +93,7 @@ pub async fn create_upload_request_v2(
         size_limit,
         mime_types,
     } = post_request;
-    let db = DATABASE.get().unwrap();
+    let db = &state.db;
     match (public_key, secret_key) {
         (Some(public_key_u), Some(secret_key_u)) => {
             match validate_api_key_v2(&db, &public_key_u, Some(secret_key_u.clone())).await {
@@ -108,6 +111,7 @@ pub async fn create_upload_request_v2(
                         };
                         return crate::request::actions::create_upload_request(
                             &db,
+                            &state.config,
                             bucket,
                             upload_request_v2,
                             ActionTypes::UPLOAD_V2,

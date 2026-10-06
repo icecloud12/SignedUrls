@@ -7,7 +7,7 @@ use mongodb::{
 
 use axum::{
     body::Body,
-    extract::{Json, Path},
+    extract::{Json, Path, State},
     response::IntoResponse,
 };
 use tokio_util::io::ReaderStream;
@@ -17,12 +17,13 @@ use crate::{
         file_models::FileDocument,
         signed_url_models::{DeleteFileUsingApiKey, DeleteFileUsingApiKeyV2},
     },
-    network::{db_connection::DATABASE, DbCollection},
+    network::DbCollection,
+    state::AppState,
     project::actions::{validate_api_key_v1, validate_api_key_v2},
 };
 use hyper::StatusCode;
 use serde_json::json;
-use signed_urls::collections;
+use crate::collections;
 use tokio::fs::remove_file;
 
 pub async fn read_file(file_id: &String, db: &Database) -> (StatusCode, Option<axum::body::Body>) {
@@ -74,10 +75,11 @@ pub async fn read_file(file_id: &String, db: &Database) -> (StatusCode, Option<a
 }
 
 pub async fn delete_file_using_api_key_v1(
+    State(state): State<AppState>,
     Path(params): Path<Vec<(String, String)>>,
     Json(payload): Json<DeleteFileUsingApiKey>,
 ) -> impl IntoResponse {
-    let db = DATABASE.get().unwrap();
+    let db = &state.db;
     if let Some(file_id) = params.get(0) {
         match ObjectId::from_str(file_id.1.clone().as_str()) {
             Ok(file_obj_id) => {
@@ -186,10 +188,11 @@ pub async fn delete_file_using_api_key_v1(
         .into_response();
 }
 pub async fn delete_file_using_api_key_v2(
+    State(state): State<AppState>,
     Path(params): Path<Vec<(String, String)>>,
     Json(payload): Json<DeleteFileUsingApiKeyV2>,
 ) -> impl IntoResponse {
-    let db = DATABASE.get().unwrap();
+    let db = &state.db;
     if let Some(file_id) = params.get(0) {
         match ObjectId::from_str(file_id.1.clone().as_str()) {
             Ok(file_obj_id) => {

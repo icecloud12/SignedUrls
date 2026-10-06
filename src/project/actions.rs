@@ -10,14 +10,13 @@ use crate::{
     models::project_models::{
         BucketDocument, CreatedBucket, InsertBucketDocument, ProjectDocument,
     },
-    network::{db_connection::DATABASE, DbCollection},
+    network::DbCollection,
 };
 use base64::{engine::general_purpose, Engine as _};
 use rand::{self, RngCore};
 pub static PUBLIC_KEY_LENGTH: usize = 16;
 pub static SECRET_KEY_LENGTH: usize = 32;
-pub async fn create_bucket(bucket_name: String) -> Result<CreatedBucket, ()> {
-    let db = DATABASE.get().unwrap();
+pub async fn create_bucket(db: &Database, bucket_name: String) -> Result<CreatedBucket, ()> {
 
     //check if exists
     let if_exist_result: Result<Option<BucketDocument>, mongodb::error::Error> = db
@@ -126,7 +125,7 @@ pub async fn validate_api_key_v1(
         .collection::<ProjectDocument>(DbCollection::PROJECT.to_string().as_str())
         .find_one(
             doc! {
-                signed_urls::collections::Bucket::API_KEY : api_key
+                crate::collections::Bucket::API_KEY : api_key
             },
             None,
         )
@@ -149,7 +148,7 @@ pub async fn validate_api_key_v2(
         .collection::<BucketDocument>(DbCollection::BUCKET.to_string().as_str())
         .find_one(
             doc! {
-                signed_urls::collections::Bucket::PUBLIC_KEY : public_key
+                crate::collections::Bucket::PUBLIC_KEY : public_key
             },
             None,
         )

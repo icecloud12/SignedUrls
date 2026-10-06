@@ -1,42 +1,37 @@
-mod util;
-mod network;
-mod project;
-mod request;
-mod signed_url;
-mod models;
-use std::{env, net::SocketAddr, path::PathBuf};
-use axum_server::tls_rustls::RustlsConfig;
 use dotenv::dotenv;
-use network::{app_router, db_connection::DATABASE};
-#[tokio::main]
-async fn main(){
-    dotenv().ok();
-    let db = network::connect().await;
-    let _ = DATABASE.set(db);
-    //routes
-    let router = app_router::router().await;
+use signed_urls::{AppState, Config};
 
-    let subsciber = tracing_subscriber::fmt().compact().with_file(true).with_line_number(true).with_target(true).finish();
-    tracing::subscriber::set_global_default(subsciber).unwrap();
-    
-    match RustlsConfig::from_pem_file(
-        PathBuf::from("./src/cert/")
-            .join("localhost.crt"),
-            PathBuf::from("./src/cert/")
-            .join("localhost.pem")
-    ).await {
-        Ok(config)=>{
-            tracing::info!("TLS Certificates found");
-            let ip: Vec<u8> = env::var("ADDRESS").unwrap().split(".").into_iter().map(|x| x.parse::<u8>().unwrap()).collect::<Vec<u8>>();
-            let socket_address: [u8; 4] = [ip[0],ip[1],ip[2],ip[3]];
-            let addr = SocketAddr::from((socket_address, env::var("PORT").unwrap().parse::<u16>().unwrap()));
-            let addr_s = &addr.to_string();
-            tracing::info!("listening on https://{addr_s}");
-            axum_server::bind_rustls(addr,config).serve(router.into_make_service()).await.unwrap()        
-        }
-        Err(_e)=>{ 
-            tracing::error!("Missing certificaes");
-        }
-    }
-    
+#[tokio::main]
+async fn main() {
+    dotenv().ok();
+    let subscriber = tracing_subscriber::fmt()
+        .compact()
+        .with_file(true)
+        .with_line_number(true)
+        .with_target(true)
+        .finish();
+    tracing::subscriber::set_global_default(subscriber).unwrap();
+
+    let config = Config::from_env().unwrap_or_else(|e| {
+        tracing::error!("Invalid configuration:\n{e}");
+        std::process::exit(1);
+    });
+    let db = signed_urls::connect(&config.database_uri, &config.database_name)
+        .await
+        .unwrap_or_else(|e| {
+            tracing::error!("Unable to set up database client: {e}");
+            std::process::exit(1);
+        });
+    let tls = signed_urls::rustls_config(&config).await.unwrap_or_else(|e| {
+        tracing::error!("{e}");
+        std::process::exit(1);
+    });
+
+    let addr = config.address;
+    let app = signed_urls::app(AppState::new(db, config));
+    tracing::info!("listening on https://{addr}");
+    axum_server::bind_rustls(addr, tls)
+        .serve(app.into_make_service())
+        .await
+        .unwrap();
 }

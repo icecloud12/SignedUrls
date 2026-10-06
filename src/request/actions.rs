@@ -1,11 +1,9 @@
-use std::env;
-
+use crate::config::Config;
 use crate::models::{
     file_models::FileDocument,
     project_models::BucketDocument,
     request_models::{CreateSignedUrlPostRequestV2, RequestOptions, UploadRequest},
 };
-use crate::network::db_connection::DATABASE;
 use crate::network::DbCollection;
 use crate::signed_url::actions::{create_hashed_signature, ActionTypes};
 use axum::response::{IntoResponse, Response};
@@ -17,9 +15,9 @@ use mongodb::Database;
 use serde_json::json;
 
 pub async fn file_reference_is_valid(
+    db: &Database,
     file_id: ObjectId,
 ) -> Result<FileDocument, (StatusCode, String)> {
-    let db = DATABASE.get().unwrap();
     let file_ref: Result<Option<FileDocument>, mongodb::error::Error> = db
         .collection::<FileDocument>(DbCollection::FILE.to_string().as_str())
         .find_one(doc! { "_id": file_id}, None)
@@ -42,6 +40,7 @@ pub async fn file_reference_is_valid(
 
 pub async fn create_upload_request(
     db: &Database,
+    config: &Config,
     bucket: BucketDocument,
     upload_request: CreateSignedUrlPostRequestV2,
     action_type: ActionTypes,
@@ -58,13 +57,7 @@ pub async fn create_upload_request(
     } = upload_request;
     let hashed_signature = create_hashed_signature(
         &bucket._id.to_hex(),
-        &duration.unwrap_or_else(|| {
-            std::env::var("DEFAULT_DURATION_AS_SECONDS")
-                .unwrap()
-                .to_string()
-                .parse::<u64>()
-                .unwrap()
-        }),
+        &duration.unwrap_or(config.default_duration_secs),
         &action_type.to_string(),
         None,
     );
@@ -98,8 +91,8 @@ pub async fn create_upload_request(
         .as_object_id()
         .unwrap()
         .to_string();
-    let prefix = env::var("PREFIX").unwrap();
-    let replaced_url = env::var("REPLACED_URL").unwrap();
+    let prefix = &config.prefix;
+    let replaced_url = &config.replaced_url;
     match action_type {
         ActionTypes::UPLOAD_V1 => {
             let generated_url: String = format!(

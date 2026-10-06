@@ -3,7 +3,7 @@ mod file;
 mod request;
 mod view_file_request;
 
-pub use self::bucket::Bucket;
-pub use self::file::File;
-pub use self::request::Request;
-pub use self::view_file_request::ViewFileRequest;
+pub use bucket::Bucket;
+pub use file::File;
+pub use request::Request;
+pub use view_file_request::ViewFileRequest;
