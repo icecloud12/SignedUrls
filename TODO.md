@@ -13,8 +13,8 @@ v1 routes keep their current behavior (legacy); new behavior targets v2.
 
 ## 2. Safety net
 
-- [ ] **Integration test harness**: build the app against a test Mongo database + temp data dir, send requests with `tower::ServiceExt::oneshot`.
-- [ ] **Characterization tests**: record the current behavior of every route (status codes + response shapes) for v1, legacy aliases, and v2: create bucket, create view/upload request, upload, view, public preview, delete. These keep the next steps from breaking v1 clients.
+- [x] **Integration test harness**: build the app against a test Mongo database + temp data dir, send requests with `tower::ServiceExt::oneshot`.
+- [x] **Characterization tests**: record the current behavior of every route (status codes + response shapes) for v1, legacy aliases, and v2: create bucket, create view/upload request, upload, view, public preview, delete. These keep the next steps from breaking v1 clients.
 
 ## 3. Error handling
 
@@ -23,6 +23,12 @@ v1 routes keep their current behavior (legacy); new behavior targets v2.
 - [ ] **Remove unwraps on input/IO**: `ObjectId::from_str(...).unwrap()`, `next_field().unwrap()`, `chunk().unwrap()`, `File::create().unwrap()`, etc.
 - [ ] **Stop ignoring write errors**: `let _ = file.write_all(...)` in `save_file_to_directory`.
 - [ ] **Action enums**: replace hand-written `ToString` / `TryInto` on `ActionTypes` & co. with `Display` / serde `rename_all`.
+- [ ] **Enable lints**: add to `Cargo.toml` and fix what's left (`clippy.toml` already allows unwrap/expect in tests):
+  ```toml
+  [lints.clippy]
+  pedantic = { level = "warn", priority = -1 }
+  unwrap_used = "warn"
+  ```
 
 ## 4. Structure
 
