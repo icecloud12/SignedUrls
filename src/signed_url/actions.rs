@@ -25,7 +25,7 @@ use serde_json::from_str;
 use sha2::{Digest, Sha256};
 use std::{
     num::ParseIntError,
-    path::PathBuf,
+    path::{Component, Path, PathBuf},
     str::FromStr,
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -492,6 +492,7 @@ pub async fn validate_signed_url_v2(
 
 pub async fn save_files_to_directory(
     db: &Database,
+    data_dir: &Path,
     request_id: &String,
     project_id: &String,
     target: Option<String>,
@@ -500,10 +501,21 @@ pub async fn save_files_to_directory(
     version: UploadActionTypes, //param: ValidateSignedUrlResultUploadFiles
 ) -> Result<SaveFilesToDirectoryResult, bool> {
     let mut initial_path: std::path::PathBuf =
-        std::path::PathBuf::from("./data/").join(format!("{}/", project_id.clone()));
+        data_dir.join(format!("{}/", project_id.clone()));
     if let Some(target) = target {
-        let clean_target = target.trim_matches('/').replace("..", "");
-        initial_path = initial_path.join(&clean_target);
+        let target = match version {
+            // v1 (legacy): quietly drop anything that isn't a plain folder name
+            UploadActionTypes::V1 => sanitize_target(&target),
+            // v2: reject instead of fixing; catches requests stored before targets were validated
+            UploadActionTypes::V2 => {
+                if !is_safe_target(&target) {
+                    tracing::warn!("rejected upload with unsafe target {target:?}");
+                    return Err(false);
+                }
+                sanitize_target(&target)
+            }
+        };
+        initial_path = initial_path.join(target);
     }
 
     let mut created_files: Vec<signed_url_models::File> = vec![];
@@ -613,6 +625,7 @@ pub async fn save_files_to_directory(
                                     new_file_name,
                                     new_file_path,
                                     chunks,
+                                    data_dir,
                                 )
                                 .await;
                                 created_files.push(saved_file);
@@ -631,14 +644,7 @@ pub async fn save_files_to_directory(
 
     Ok(SaveFilesToDirectoryResult {
         request_id: request_id.to_string(),
-        path: initial_path
-            .to_str()
-            .unwrap()
-            .to_string()
-            .split("/data")
-            .last()
-            .unwrap()
-            .to_string(),
+        path: relative_to_data_dir(initial_path.to_str().unwrap(), data_dir),
         files: created_files,
     })
 }
@@ -648,6 +654,7 @@ pub async fn save_file_to_directory(
     new_file_name: String,
     new_file_path: String,
     file_chunks: Vec<Bytes>,
+    data_dir: &Path,
 ) -> signed_url_models::File {
     let mut file: TokioFile = TokioFile::create(new_file_path.clone()).await.unwrap();
     let mut _i = file_chunks.iter();
@@ -658,8 +665,34 @@ pub async fn save_file_to_directory(
     return models::signed_url_models::File {
         _id: new_file_name,
         file_name: original_file_name,
-        path: new_file_path.split("./data").last().unwrap().to_string(),
+        path: relative_to_data_dir(&new_file_path, data_dir),
     };
+}
+
+/// True if `target` can't leave the bucket folder: no `..` and no drive prefix.
+/// Leading/trailing slashes and `.` are harmless formatting and are allowed.
+pub fn is_safe_target(target: &str) -> bool {
+    Path::new(target)
+        .components()
+        .all(|component| !matches!(component, Component::ParentDir | Component::Prefix(_)))
+}
+
+/// Keeps only plain folder names from a client-supplied `target`, so it always
+/// stays inside the bucket folder: `/`, `..`, `.` (and Windows drive prefixes) are dropped.
+fn sanitize_target(target: &str) -> PathBuf {
+    Path::new(target)
+        .components()
+        .filter_map(|component| match component {
+            Component::Normal(name) => Some(name),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Path as shown to clients: `<data_dir>/<bucket>/...` becomes `/<bucket>/...`.
+fn relative_to_data_dir(path: &str, data_dir: &Path) -> String {
+    let prefix = data_dir.to_str().unwrap_or_default().trim_end_matches('/');
+    path.strip_prefix(prefix).unwrap_or(path).to_string()
 }
 
 pub fn replicate_hash(
@@ -680,4 +713,64 @@ pub fn replicate_hash(
         file_id,
     );
     replicated_hash == signature
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn relative_path_matches_old_behavior_for_default_data_dir() {
+        let data_dir = Path::new("./data");
+        // what the old code did: split on the literal "./data" and keep the rest
+        let old = |p: &str| p.split("./data").last().unwrap().to_string();
+
+        for path in ["./data/bucket/", "./data/bucket/file/file.png", "./data/bucket/target/x"] {
+            assert_eq!(relative_to_data_dir(path, data_dir), old(path), "path: {path}");
+        }
+    }
+
+    #[test]
+    fn sanitize_target_keeps_only_folder_names() {
+        let cases = [
+            ("images/2024", "images/2024"),
+            ("/images/2024/", "images/2024"),
+            ("../../etc", "etc"),
+            ("..//tmp/x", "tmp/x"),
+            ("/tmp/x", "tmp/x"),
+            ("a/./b/../c", "a/b/c"),
+            ("..", ""),
+            ("", ""),
+            ("a..b/..c", "a..b/..c"), // only a whole ".." component is special
+        ];
+        for (target, expected) in cases {
+            assert_eq!(sanitize_target(target), PathBuf::from(expected), "target: {target}");
+        }
+    }
+
+    #[test]
+    fn is_safe_target_rejects_only_traversal() {
+        for safe in ["images/2024", "/images/2024/", "./images", "", "a..b/..c", "/tmp/x"] {
+            assert!(is_safe_target(safe), "should be safe: {safe:?}");
+        }
+        for unsafe_target in ["..", "../x", "../../etc", "..//tmp/x", "a/../b", "images/.."] {
+            assert!(!is_safe_target(unsafe_target), "should be unsafe: {unsafe_target:?}");
+        }
+    }
+
+    #[test]
+    fn relative_path_ignores_trailing_slash_on_data_dir() {
+        assert_eq!(
+            relative_to_data_dir("./data/bucket/f.png", Path::new("./data/")),
+            "/bucket/f.png"
+        );
+    }
+
+    #[test]
+    fn relative_path_works_with_absolute_data_dir() {
+        assert_eq!(
+            relative_to_data_dir("/tmp/test-123/bucket/f.png", Path::new("/tmp/test-123")),
+            "/bucket/f.png"
+        );
+    }
 }

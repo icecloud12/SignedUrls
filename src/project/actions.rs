@@ -4,7 +4,7 @@ use argon2::{
 };
 use hyper::StatusCode;
 use mongodb::{bson::doc, Database};
-use std::fs;
+use std::{fs, path::Path};
 
 use crate::{
     models::project_models::{
@@ -101,8 +101,8 @@ fn generate_random_key<const T: usize>() -> [u8; T] {
     key
 }
 
-pub async fn create_bucket_directory(project_id: &String) {
-    let path = std::path::PathBuf::from("./data").join(&project_id);
+pub async fn create_bucket_directory(data_dir: &Path, project_id: &String) {
+    let path = data_dir.join(&project_id);
     if !(fs::metadata(&path).is_ok() && fs::metadata(&path).expect("Path does not exist").is_dir())
     {
         match std::fs::create_dir_all(path) {

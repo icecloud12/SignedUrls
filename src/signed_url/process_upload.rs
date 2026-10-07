@@ -68,6 +68,7 @@ pub async fn process_signed_url_upload_request_v1(
             .unwrap();
         let save_files_to_directory_result = save_files_to_directory(
             db,
+            &state.config.data_dir,
             &request._id.to_hex(),
             &project._id.to_hex(),
             request.target,
@@ -143,6 +144,7 @@ pub async fn process_signed_url_upload_request_v2(
 
                             let save_files_to_directory_result = save_files_to_directory(
             db,
+            &state.config.data_dir,
                                 &request_id.to_hex(),
                                 &bucket_id.to_hex(),
                                 target,

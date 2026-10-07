@@ -10,6 +10,8 @@ pub struct Config {
     pub database_uri: String,
     pub database_name: String,
     pub default_duration_secs: u64,
+    /// Root folder for uploaded files. Stored file records keep paths under it, so don't change it on a live deployment.
+    pub data_dir: PathBuf,
     /// Certificate files to serve. When `None`, a self-signed certificate is generated at startup.
     pub tls_files: Option<TlsFiles>,
 }
@@ -31,6 +33,7 @@ impl Config {
         let database_uri = env.parse::<String>("DATABASE_URI");
         let database_name = env.parse::<String>("DATABASE_NAME");
         let default_duration_secs = env.parse::<u64>("DEFAULT_DURATION_AS_SECONDS");
+        let data_dir = env.parse::<PathBuf>("DATA_DIR");
         let tls_files = match (
             env.optional::<PathBuf>("TLS_CERT_PATH"),
             env.optional::<PathBuf>("TLS_KEY_PATH"),
@@ -52,6 +55,7 @@ impl Config {
                 database_uri: database_uri?,
                 database_name: database_name?,
                 default_duration_secs: default_duration_secs?,
+                data_dir: data_dir?,
                 tls_files,
             })
         };

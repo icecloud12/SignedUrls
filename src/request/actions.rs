@@ -5,7 +5,7 @@ use crate::models::{
     request_models::{CreateSignedUrlPostRequestV2, RequestOptions, UploadRequest},
 };
 use crate::network::DbCollection;
-use crate::signed_url::actions::{create_hashed_signature, ActionTypes};
+use crate::signed_url::actions::{create_hashed_signature, is_safe_target, ActionTypes};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use hyper::StatusCode;
@@ -55,6 +55,15 @@ pub async fn create_upload_request(
         size_limit,
         mime_types,
     } = upload_request;
+    if let (ActionTypes::UPLOAD_V2, Some(target)) = (&action_type, &target) {
+        if !is_safe_target(target) {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({ "message": "Invalid target" })),
+            )
+                .into_response();
+        }
+    }
     let hashed_signature = create_hashed_signature(
         &bucket._id.to_hex(),
         &duration.unwrap_or(config.default_duration_secs),

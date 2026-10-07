@@ -20,7 +20,7 @@ pub async fn create_bucket(
     match create_request {
         Ok(new_bucket) => {
             //then create directory
-            actions::create_bucket_directory(&new_bucket._id).await;
+            actions::create_bucket_directory(&state.config.data_dir, &new_bucket._id).await;
 
             return (StatusCode::CREATED, Json(new_bucket)).into_response();
         }
