@@ -19,15 +19,26 @@ async fn create_bucket_returns_keys_on_every_route() {
         let name = format!("bucket-{i}");
         let res = app.post_json(route, json!({ "name": name })).await;
 
-        assert_eq!(res.status, StatusCode::CREATED, "route {route}: {}", res.text());
+        assert_eq!(
+            res.status,
+            StatusCode::CREATED,
+            "route {route}: {}",
+            res.text()
+        );
         let body = res.json();
         assert_eq!(body["name"], name);
         for field in ["_id", "public_key", "secret_key", "secret_key_hint"] {
-            assert!(body[field].is_string(), "route {route}: missing {field} in {body}");
+            assert!(
+                body[field].is_string(),
+                "route {route}: missing {field} in {body}"
+            );
         }
         // the hint is "***" plus the last 3 characters of the secret
         let secret = body["secret_key"].as_str().unwrap();
-        assert_eq!(body["secret_key_hint"], format!("***{}", &secret[secret.len() - 3..]));
+        assert_eq!(
+            body["secret_key_hint"],
+            format!("***{}", &secret[secret.len() - 3..])
+        );
     }
 }
 
@@ -35,7 +46,10 @@ async fn create_bucket_returns_keys_on_every_route() {
 async fn create_bucket_stores_hashed_secret_and_creates_directory() {
     let app = TestApp::new().await;
 
-    let body = app.post_json("/v2/bucket", json!({ "name": "stored" })).await.json();
+    let body = app
+        .post_json("/v2/bucket", json!({ "name": "stored" }))
+        .await
+        .json();
     let id = body["_id"].as_str().unwrap();
     let secret = body["secret_key"].as_str().unwrap();
 
@@ -48,11 +62,20 @@ async fn create_bucket_stores_hashed_secret_and_creates_directory() {
         .unwrap()
         .expect("bucket document was not stored");
     let hashed = stored.get_str("hashed_secret_key").unwrap();
-    assert!(hashed.starts_with("$argon2"), "expected an argon2 hash, got {hashed}");
+    assert!(
+        hashed.starts_with("$argon2"),
+        "expected an argon2 hash, got {hashed}"
+    );
     assert_ne!(hashed, secret, "secret key must not be stored in plaintext");
-    assert!(!stored.contains_key("api_key"), "new buckets have no v1 api_key");
+    assert!(
+        !stored.contains_key("api_key"),
+        "new buckets have no v1 api_key"
+    );
 
-    assert!(app.data_dir.path().join(id).is_dir(), "bucket directory was not created");
+    assert!(
+        app.data_dir.path().join(id).is_dir(),
+        "bucket directory was not created"
+    );
 }
 
 #[tokio::test]
@@ -63,7 +86,10 @@ async fn create_bucket_with_existing_name_is_a_conflict() {
     let res = app.post_json("/v2/bucket", json!({ "name": "dup" })).await;
 
     assert_eq!(res.status, StatusCode::CONFLICT);
-    assert_eq!(res.json(), json!({ "message": "Project already exists" }));
+    assert_eq!(
+        res.json(),
+        json!({ "code": "BUCKET_ALREADY_EXISTS", "message": "Bucket already exists" })
+    );
 }
 
 #[tokio::test]

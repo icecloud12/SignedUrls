@@ -1,5 +1,6 @@
 pub mod collections;
 pub mod config;
+pub mod error;
 pub mod state;
 pub mod tls;
 

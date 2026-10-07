@@ -2,9 +2,9 @@ use axum::extract::{Json, State};
 use axum::response::IntoResponse;
 use hyper::StatusCode;
 use serde::Deserialize;
-use serde_json::json;
 
 use super::actions;
+use crate::error::BucketError;
 use crate::state::AppState;
 #[derive(Deserialize)]
 pub struct CreateProjectPostRequest {
@@ -14,24 +14,19 @@ pub struct CreateProjectPostRequest {
 pub async fn create_bucket(
     State(state): State<AppState>,
     Json(post_request): Json<CreateProjectPostRequest>,
-) -> impl IntoResponse {
+) -> Result<impl IntoResponse, BucketError> {
     let create_request = actions::create_bucket(&state.db, post_request.name).await;
 
     match create_request {
         Ok(new_bucket) => {
-            //then create directory
-            actions::create_bucket_directory(&state.config.data_dir, &new_bucket._id).await;
+            let _ = actions::create_bucket_directory(&state.config.data_dir, &new_bucket._id).await;
+            // NOTE
+            // a failure on creating a bucket directory is still OK for now since uploading file can create the bucket directory anyway.
 
-            return (StatusCode::CREATED, Json(new_bucket)).into_response();
+            // NOTE
+            // if there is a directory issue, we can't give an INTERNAL_SERVER_ERROR since the bucket is written in the db
+            Ok((StatusCode::CREATED, Json(new_bucket)))
         }
-        Err(_) => {
-            let j = json!({"message":"Project already exists"});
-            return (StatusCode::CONFLICT, Json(j)).into_response();
-        }
-    };
+        Err(_) => Err(BucketError::AlreadyExists),
+    }
 }
-
-// pub async fn create_bucket_v2(
-//     Json(post_request): JSON<CreateProjectPostRequest>,
-// ) -> impl Intoresponse {
-// }

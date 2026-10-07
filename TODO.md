@@ -21,7 +21,7 @@ v1 routes keep their current behavior (legacy); new behavior targets v2.
 - [ ] **AppError**: one error enum implementing `IntoResponse` (BadRequest, NotFound, Expired, PayloadTooLarge, Db, Io, ...). Handlers return `Result<impl IntoResponse, AppError>`.
 - [ ] **Flatten handlers**: replace nested `match` blocks with `?`. Start with `validate_signed_url_v2` and `create_view_request`.
 - [ ] **Remove unwraps on input/IO**: `ObjectId::from_str(...).unwrap()`, `next_field().unwrap()`, `chunk().unwrap()`, `File::create().unwrap()`, etc.
-- [ ] **Stop ignoring write errors**: `let _ = file.write_all(...)` in `save_file_to_directory`.
+- [ ] **Stop ignoring write errors**: `let _ = file.write_all(...)` in `save_file_to_directory`. Use `?`, then `file.flush().await?` before the file is dropped: a tokio `File` hands writes to a background thread, so errors only show up on the next operation or flush (and `Drop` ignores them).
 - [ ] **Action enums**: replace hand-written `ToString` / `TryInto` on `ActionTypes` & co. with `Display` / serde `rename_all`.
 - [ ] **Enable lints**: add to `Cargo.toml` and fix what's left (`clippy.toml` already allows unwrap/expect in tests):
   ```toml
@@ -33,6 +33,7 @@ v1 routes keep their current behavior (legacy); new behavior targets v2.
 ## 4. Structure
 
 - [ ] **Router**: `Router::nest(prefix, ...)` with `v1_routes()`, `v2_routes()`, `legacy_routes()`. No more `format!` per route.
+- [ ] **Remove `/project/create` and `/v1/bucket`**: they create v2-style buckets (no `api_key`), so they never worked for v1, and no client uses them (`signed-url-api-client` only calls v2 view/upload/delete). Delete the routes (`app_router.rs:15-16`), keep only `/v2/bucket` in `tests/bucket.rs` `ROUTES`, add a test that the old routes return 404, move the matching `FINDINGS.md` entry to "Fixed".
 - [ ] **Feature modules**: reorganize `project/`, `request/`, `signed_url/`, `models/`, `collections/` into features (`bucket/`, `upload/`, `view/`, `file/`, `auth/` or similar), each holding its handlers, logic, and models. Split `signed_url/actions.rs` (685 lines).
 
 ## 5. Upload pipeline (v2)
@@ -55,3 +56,9 @@ v1 routes keep their current behavior (legacy); new behavior targets v2.
 
 - [ ] v1 upload uses the same `save_files_to_directory`. Should v1 also get all-or-nothing + size caps, or keep a frozen copy of the old path?
 - [ ] Sweeper interval / pending TTL values.
+
+## Icebox
+
+Ideas for later. Not scheduled, not part of the steps above.
+
+- **Errors and responses per resource**: each feature module owns its error enum and response types (e.g. `bucket::BucketError`, `bucket::BucketResponse`) instead of one global list. If done, it would split up the single `AppError` from step 3; shared cases (Db, Io, Unauthorized) stay in one common place and convert with `From`.

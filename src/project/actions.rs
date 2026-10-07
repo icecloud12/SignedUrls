@@ -4,9 +4,10 @@ use argon2::{
 };
 use hyper::StatusCode;
 use mongodb::{bson::doc, Database};
-use std::{fs, path::Path};
+use std::path::Path;
 
 use crate::{
+    error::{AppError, BucketError},
     models::project_models::{
         BucketDocument, CreatedBucket, InsertBucketDocument, ProjectDocument,
     },
@@ -17,7 +18,6 @@ use rand::{self, RngCore};
 pub static PUBLIC_KEY_LENGTH: usize = 16;
 pub static SECRET_KEY_LENGTH: usize = 32;
 pub async fn create_bucket(db: &Database, bucket_name: String) -> Result<CreatedBucket, ()> {
-
     //check if exists
     let if_exist_result: Result<Option<BucketDocument>, mongodb::error::Error> = db
         .collection::<BucketDocument>(DbCollection::BUCKET.to_string().as_str())
@@ -101,20 +101,16 @@ fn generate_random_key<const T: usize>() -> [u8; T] {
     key
 }
 
-pub async fn create_bucket_directory(data_dir: &Path, project_id: &String) {
+pub async fn create_bucket_directory(
+    data_dir: &Path,
+    project_id: &String,
+) -> Result<(), BucketError> {
     let path = data_dir.join(&project_id);
-    if !(fs::metadata(&path).is_ok() && fs::metadata(&path).expect("Path does not exist").is_dir())
-    {
-        match std::fs::create_dir_all(path) {
-            Ok(_) => {
-                println!("created directory");
-            }
-            Err(error) => {
-                println!("cannot create directory here");
-                println!("{:?}", error)
-            }
-        }
-    }
+    tokio::fs::create_dir_all(&path).await.map_err(|e| {
+        tracing::error!("Cannot create directory here: {:#?}", &path.to_str());
+        tracing::info!("{:#?}", e);
+        BucketError::CannotWriteDirectory
+    })
 }
 
 pub async fn validate_api_key_v1(
